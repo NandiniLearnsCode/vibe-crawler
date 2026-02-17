@@ -1,0 +1,52 @@
+name: Vibe Crawl
+
+on:
+  # Manual trigger with inputs
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: "URL to crawl"
+        required: true
+        type: string
+      max_pages:
+        description: "Max pages to crawl"
+        required: false
+        default: "20"
+        type: string
+
+  # Scheduled weekly crawl (requires DEFAULT_TARGET_URL repo variable)
+  schedule:
+    - cron: "0 8 * * 1" # every Monday at 8am UTC
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          playwright install chromium --with-deps
+
+      - name: Run Vibe Crawler
+        run: |
+          python crawler.py \
+            "${{ github.event.inputs.target_url || vars.DEFAULT_TARGET_URL }}" \
+            --max-pages "${{ github.event.inputs.max_pages || '20' }}" \
+            --output report.json \
+            --format both
+
+      - name: Upload reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: vibe-crawler-report-${{ github.run_id }}
+          path: |
+            report.json
+            report.html
+          retention-days: 30
