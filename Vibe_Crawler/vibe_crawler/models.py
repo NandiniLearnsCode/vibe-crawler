@@ -74,6 +74,8 @@ class CrawlReport:
     pages: list[PageRecord]
     bugs: list[BugReport]
     output_path: Path | None = None
+    mode: str = "deterministic"
+    agent_trace: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -81,9 +83,11 @@ class CrawlReport:
             "start_url": self.start_url,
             "started_at": self.started_at,
             "finished_at": self.finished_at,
+            "mode": self.mode,
             "summary": self.summary(),
             "pages": [page.to_dict() for page in self.pages],
             "bugs": [bug.to_dict() for bug in self.bugs],
+            "agent_trace": self.agent_trace,
         }
 
     def summary(self) -> dict[str, Any]:

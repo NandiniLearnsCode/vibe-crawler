@@ -119,11 +119,21 @@ cd Vibe_Crawler
 python crawler.py --url https://example.com
 ```
 
+Run in agentic-triage mode (deterministic tools + bounded follow-up planning):
+
+```bash
+python crawler.py --url https://example.com --mode agentic
+```
+
 Use config file:
 
 ```bash
 python crawler.py --config examples/sample_config.json
 ```
+
+Available run modes:
+- `deterministic` (default): fixed crawl+detector flow
+- `agentic`: planner schedules bounded high-value follow-up scans and records an agent trace
 
 ## Run web UI (URL submit + report viewer)
 
@@ -136,6 +146,7 @@ Then open `http://127.0.0.1:8000` in your browser.
 
 What the UI does:
 - submit crawl jobs with URL + limits
+- choose deterministic vs agentic run mode
 - poll job status
 - render grouped bug findings by severity
 - show screenshot path and evidence fields

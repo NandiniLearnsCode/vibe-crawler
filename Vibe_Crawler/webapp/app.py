@@ -15,6 +15,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, HttpUrl
 
+from vibe_crawler.agentic import AgenticRunner
 from vibe_crawler.config import CrawlConfig
 from vibe_crawler.orchestrator import CrawlOrchestrator
 from vibe_crawler.reporting import human_summary, save_json_report
@@ -41,6 +42,7 @@ class CrawlRequest(BaseModel):
     timeout_ms: int = Field(default=20_000, ge=1000, le=120_000)
     include_mobile_checks: bool = True
     include_form_checks: bool = True
+    mode: str = Field(default="deterministic", pattern="^(deterministic|agentic)$")
 
 
 class CrawlResponse(BaseModel):
@@ -122,8 +124,12 @@ async def _run_crawl_job(job: JobState, request: CrawlRequest) -> None:
             screenshot_dir=screenshot_dir,
             output_path=report_path,
         )
-        orchestrator = CrawlOrchestrator(config=config, headless=True)
-        report = await orchestrator.run()
+        if request.mode == "agentic":
+            runner = AgenticRunner(config=config, headless=True, max_actions=max(20, request.max_pages * 6))
+            report = await runner.run()
+        else:
+            orchestrator = CrawlOrchestrator(config=config, headless=True)
+            report = await orchestrator.run()
         save_json_report(report, report_path)
 
         job.status = "completed"

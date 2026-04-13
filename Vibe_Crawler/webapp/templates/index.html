@@ -10,7 +10,7 @@
     <main class="container">
       <header>
         <h1>Vibe Crawler QA Dashboard</h1>
-        <p class="subtitle">Submit a public URL and get a detailed deterministic bug report.</p>
+        <p class="subtitle">Submit a public URL and get a detailed bug report (deterministic or agentic triage mode).</p>
       </header>
 
       <section class="card">
@@ -41,6 +41,10 @@
           <label class="checkbox-row">
             <input id="form-checks" name="include_form_checks" type="checkbox" checked />
             Include form checks
+          </label>
+          <label class="checkbox-row">
+            <input id="agentic-mode" name="agentic_mode" type="checkbox" />
+            Agentic triage mode (bounded follow-up actions)
           </label>
 
           <div style="margin-top: 14px">

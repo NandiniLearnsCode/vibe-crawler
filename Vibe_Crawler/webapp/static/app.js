@@ -1,5 +1,6 @@
 const form = document.getElementById("crawl-form");
 const urlInput = document.getElementById("url-input");
+const modeSelect = document.getElementById("crawl-mode");
 const statusCard = document.getElementById("status-card");
 const statusText = document.getElementById("status-text");
 const summaryCard = document.getElementById("summary-card");
@@ -194,6 +195,7 @@ form.addEventListener("submit", async (event) => {
 
   const payload = {
     url: urlInput.value.trim(),
+    mode: modeSelect ? modeSelect.value : "deterministic",
     max_pages: Number(document.getElementById("max-pages").value || 8),
     max_depth: Number(document.getElementById("max-depth").value || 2),
     timeout_ms: Number(document.getElementById("timeout-ms").value || 20000),

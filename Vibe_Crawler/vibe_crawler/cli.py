@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+from vibe_crawler.agentic import AgenticRunner
 from vibe_crawler.config import CrawlConfig
 from vibe_crawler.orchestrator import CrawlOrchestrator
 from vibe_crawler.reporting import human_summary, save_json_report
@@ -25,6 +26,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--no-mobile", action="store_true", help="Disable mobile layout checks")
     parser.add_argument("--no-form-checks", action="store_true", help="Disable form testing")
     parser.add_argument("--headed", action="store_true", help="Show browser UI")
+    parser.add_argument(
+        "--mode",
+        choices=("deterministic", "agentic"),
+        default="deterministic",
+        help="Execution mode: deterministic crawl or agentic triage",
+    )
+    parser.add_argument(
+        "--max-actions",
+        type=int,
+        default=80,
+        help="Agentic mode only: max follow-up actions",
+    )
     parser.add_argument("--log-level", default="INFO", help="Logging level (DEBUG, INFO, WARNING...)")
     return parser.parse_args()
 
@@ -116,8 +129,12 @@ async def async_main() -> int:
     )
 
     config = build_config(args)
-    orchestrator = CrawlOrchestrator(config=config, headless=not args.headed)
-    report = await orchestrator.run()
+    if args.mode == "agentic":
+        runner = AgenticRunner(config=config, max_actions=args.max_actions, headless=not args.headed)
+        report = await runner.run()
+    else:
+        orchestrator = CrawlOrchestrator(config=config, headless=not args.headed)
+        report = await orchestrator.run()
 
     save_json_report(report, config.output_path)
     print(human_summary(report))

@@ -131,8 +131,53 @@ class CrawlOrchestrator:
             pages=pages,
             bugs=deduped_bugs,
             output_path=self.config.output_path,
+            mode="deterministic",
         )
         return report
+
+    async def run_single_page(
+        self,
+        *,
+        url: str,
+        depth: int = 0,
+        mobile: bool = False,
+        detectors: Sequence[Detector] | None = None,
+    ) -> tuple[PageRecord, list[BugReport]]:
+        """
+        Tool-style single-page scan used by the agentic loop.
+
+        It reuses the same browser/event collection logic as the bounded crawl,
+        but targets one page and an explicit detector subset.
+        """
+        run_id = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+        ensure_directory(self.config.screenshot_dir)
+
+        async with async_playwright() as playwright:
+            browser = await playwright.chromium.launch(headless=self.headless)
+            context = await browser.new_context(
+                viewport={
+                    "width": self.config.mobile_viewport[0] if mobile else self.config.desktop_viewport[0],
+                    "height": self.config.mobile_viewport[1] if mobile else self.config.desktop_viewport[1],
+                },
+                is_mobile=mobile,
+                has_touch=mobile,
+                ignore_https_errors=True,
+            )
+            try:
+                selected_detectors = list(detectors) if detectors is not None else (
+                    self.mobile_detectors if mobile else self.desktop_detectors
+                )
+                return await self._scan_single_page(
+                    browser_context=context,
+                    url=url,
+                    depth=depth,
+                    run_id=run_id,
+                    mobile=mobile,
+                    detectors=selected_detectors,
+                )
+            finally:
+                await context.close()
+                await browser.close()
 
     async def _scan_single_page(
         self,
@@ -142,6 +187,7 @@ class CrawlOrchestrator:
         depth: int,
         run_id: str,
         mobile: bool,
+        detectors: Sequence[Detector] | None = None,
     ) -> tuple[PageRecord, list[BugReport]]:
         page = await browser_context.new_page()
         console_errors: list[str] = []
@@ -218,7 +264,9 @@ class CrawlOrchestrator:
             error_responses=error_responses,
         )
 
-        detectors = self.mobile_detectors if mobile else self.desktop_detectors
+        detectors_to_run = list(detectors) if detectors is not None else (
+            self.mobile_detectors if mobile else self.desktop_detectors
+        )
         detector_ctx = PageScanContext(
             page=page,
             page_record=page_record,
@@ -229,7 +277,7 @@ class CrawlOrchestrator:
             mobile=mobile,
         )
         bugs: list[BugReport] = []
-        for detector in detectors:
+        for detector in detectors_to_run:
             try:
                 bugs.extend(await detector.detect(detector_ctx))
             except Exception as exc:
