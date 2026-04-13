@@ -1,152 +1,199 @@
 const form = document.getElementById("crawl-form");
-const statusBox = document.getElementById("job-status");
-const summaryBox = document.getElementById("summary-box");
-const findings = document.getElementById("findings");
-const formMessage = document.getElementById("form-message");
-let activePoll = null;
+const urlInput = document.getElementById("url-input");
+const statusCard = document.getElementById("status-card");
+const statusText = document.getElementById("status-text");
+const summaryCard = document.getElementById("summary-card");
+const severityContainer = document.getElementById("severity-breakdown");
+const findingsContainer = document.getElementById("findings-container");
+const pagesContainer = document.getElementById("pages-container");
+const reportLink = document.getElementById("report-link");
+const reportLinkWrap = document.getElementById("report-link-wrap");
+const emptyFindings = document.getElementById("empty-findings");
+const pageMeta = document.getElementById("page-meta");
 
-function setMessage(text, isError = false) {
-  formMessage.textContent = text;
-  formMessage.className = isError ? "hint error" : "hint";
+let pollTimer = null;
+
+function resetView() {
+  statusCard.hidden = false;
+  summaryCard.hidden = true;
+  statusText.textContent = "Starting crawl...";
+  severityContainer.innerHTML = "";
+  findingsContainer.innerHTML = "";
+  pagesContainer.innerHTML = "";
+  reportLinkWrap.classList.add("hidden");
+  emptyFindings.classList.add("hidden");
+  pageMeta.textContent = "";
 }
 
-function resetReportView() {
-  summaryBox.innerHTML = "No report yet.";
-  findings.innerHTML = "";
+function formatPercent(value) {
+  return `${Math.round(value * 100)}%`;
 }
 
-function setStatus(job) {
-  if (!job) {
-    statusBox.textContent = "No active job.";
-    return;
+function setStatus(text) {
+  statusCard.hidden = false;
+  statusText.textContent = text;
+}
+
+function createTag(text, className = "") {
+  const span = document.createElement("span");
+  span.className = `pill ${className}`.trim();
+  span.textContent = text;
+  return span;
+}
+
+function renderSeverity(summary) {
+  const map = summary.bugs_by_severity || {};
+  const severities = ["high", "medium", "low"];
+  for (const sev of severities) {
+    const box = document.createElement("div");
+    box.className = "metric";
+    box.innerHTML = `<div class="k">${sev.toUpperCase()}</div><div class="v">${map[sev] || 0}</div>`;
+    severityContainer.appendChild(box);
   }
-  const lines = [
-    `Job: ${job.job_id}`,
-    `URL: ${job.url}`,
-    `Status: ${job.status}`,
-    `Pages crawled: ${job.pages_crawled}`,
-    `Bugs found: ${job.bugs_found}`,
-  ];
-  if (job.error) lines.push(`Error: ${job.error}`);
-  statusBox.textContent = lines.join("\n");
-}
-
-function groupBySeverity(bugs) {
-  const grouped = { high: [], medium: [], low: [] };
-  for (const bug of bugs) {
-    if (grouped[bug.severity]) grouped[bug.severity].push(bug);
-    else grouped.medium.push(bug);
-  }
-  return grouped;
-}
-
-function renderSummary(report, jobId) {
-  const summary = report.summary || {};
-  summaryBox.innerHTML = `
-    <div><strong>Run ID:</strong> ${report.run_id}</div>
-    <div><strong>Pages crawled:</strong> ${summary.pages_crawled ?? 0}</div>
-    <div><strong>Total bugs:</strong> ${summary.total_bugs ?? 0}</div>
-    <div><strong>Started:</strong> ${report.started_at ?? "n/a"}</div>
-    <div><strong>Finished:</strong> ${report.finished_at ?? "n/a"}</div>
-    <div style="margin-top:8px;"><a href="/api/jobs/${encodeURIComponent(jobId)}/download" target="_blank" rel="noopener">Download JSON report</a></div>
-  `;
 }
 
 function renderFindings(report) {
   const bugs = report.bugs || [];
   if (!bugs.length) {
-    findings.innerHTML = `<div class="status-box">No high-confidence bugs detected for this run.</div>`;
+    emptyFindings.classList.remove("hidden");
     return;
   }
-  const grouped = groupBySeverity(bugs);
-  const order = ["high", "medium", "low"];
-  findings.innerHTML = "";
+  emptyFindings.classList.add("hidden");
 
-  for (const severity of order) {
-    const items = grouped[severity];
+  const grouped = { high: [], medium: [], low: [] };
+  for (const bug of bugs) {
+    (grouped[bug.severity] || grouped.medium).push(bug);
+  }
+
+  for (const sev of ["high", "medium", "low"]) {
+    const items = grouped[sev];
     if (!items.length) continue;
 
     const section = document.createElement("section");
-    section.className = "finding-group";
-    section.innerHTML = `<h3>${severity.toUpperCase()} (${items.length})</h3>`;
+    section.className = "severity-group";
+    section.innerHTML = `<div class="severity-title">${sev.toUpperCase()} (${items.length})</div>`;
 
     for (const bug of items) {
       const card = document.createElement("article");
       card.className = "bug";
 
-      const confidencePct = Math.round((bug.confidence || 0) * 100);
-      const steps = (bug.reproduction_steps || []).map((step) => `<li>${step}</li>`).join("");
-      const network = (bug.network_evidence || []).join("\n");
-      const consoleOut = (bug.console_errors || []).join("\n");
+      const meta = document.createElement("div");
+      meta.appendChild(createTag(sev, sev));
+      meta.appendChild(createTag(bug.type));
+      meta.appendChild(createTag(`confidence ${formatPercent(bug.confidence || 0)}`));
 
-      card.innerHTML = `
-        <div>
-          <span class="pill ${severity}">${severity}</span>
-          <span class="pill">${bug.type}</span>
-          <span class="pill">confidence ${confidencePct}%</span>
-        </div>
-        <div class="bug-title">${bug.short_title}</div>
-        <div class="bug-meta">${bug.page_url}</div>
-        <p>${bug.description}</p>
-        <ol class="steps">${steps}</ol>
-        ${bug.screenshot_path ? `<p class="bug-meta">screenshot: ${bug.screenshot_path}</p>` : ""}
-        ${network ? `<pre>${network}</pre>` : ""}
-        ${consoleOut ? `<pre>${consoleOut}</pre>` : ""}
-      `;
+      const title = document.createElement("div");
+      title.className = "bug-title";
+      title.textContent = bug.short_title;
+
+      const bugMeta = document.createElement("div");
+      bugMeta.className = "bug-meta";
+      bugMeta.textContent = bug.page_url;
+
+      const desc = document.createElement("p");
+      desc.textContent = bug.description;
+
+      const steps = document.createElement("ol");
+      steps.className = "steps";
+      for (const step of bug.reproduction_steps || []) {
+        const li = document.createElement("li");
+        li.textContent = step;
+        steps.appendChild(li);
+      }
+
+      card.append(meta, title, bugMeta, desc, steps);
+
+      if (bug.screenshot_path) {
+        const screenshot = document.createElement("div");
+        screenshot.className = "bug-meta";
+        screenshot.textContent = `screenshot: ${bug.screenshot_path}`;
+        card.appendChild(screenshot);
+      }
+      if (bug.network_evidence?.length) {
+        const net = document.createElement("pre");
+        net.textContent = bug.network_evidence.join("\n");
+        card.appendChild(net);
+      }
+      if (bug.console_errors?.length) {
+        const con = document.createElement("pre");
+        con.textContent = bug.console_errors.join("\n");
+        card.appendChild(con);
+      }
       section.appendChild(card);
     }
-    findings.appendChild(section);
+    findingsContainer.appendChild(section);
   }
 }
 
-async function loadReport(jobId) {
-  const response = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/report`);
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.detail || "Could not load report");
+function renderPages(report) {
+  const pages = report.pages || [];
+  pageMeta.textContent = `${pages.length} page(s) crawled`;
+  for (const page of pages) {
+    const li = document.createElement("li");
+    li.className = "bug-meta";
+    li.textContent = `${page.url} | depth ${page.depth} | status ${page.status_code ?? "n/a"} | links ${page.discovered_links.length}`;
+    pagesContainer.appendChild(li);
   }
-  return data;
+}
+
+function renderReport(report, jobId) {
+  summaryCard.hidden = false;
+  statusCard.hidden = true;
+
+  const summary = report.summary || {};
+  document.getElementById("run-id").textContent = report.run_id || "n/a";
+  document.getElementById("pages-crawled").textContent = summary.pages_crawled ?? 0;
+  document.getElementById("total-bugs").textContent = summary.total_bugs ?? 0;
+  renderSeverity(summary);
+  renderFindings(report);
+  renderPages(report);
+
+  reportLink.href = `/api/jobs/${encodeURIComponent(jobId)}/download`;
+  reportLinkWrap.classList.remove("hidden");
 }
 
 async function pollJob(jobId) {
-  if (activePoll) {
-    clearTimeout(activePoll);
-    activePoll = null;
-  }
+  if (pollTimer) clearTimeout(pollTimer);
   try {
     const response = await fetch(`/api/jobs/${encodeURIComponent(jobId)}`);
-    const job = await response.json();
+    const data = await response.json();
     if (!response.ok) {
-      throw new Error(job.detail || "Could not fetch job status");
+      setStatus(`Job error: ${data.detail || "failed to fetch job status"}`);
+      return;
     }
-    setStatus(job);
 
-    if (job.status === "queued" || job.status === "running") {
-      activePoll = setTimeout(() => pollJob(jobId), 1500);
+    if (data.status === "queued" || data.status === "running") {
+      const label = data.status === "running" ? "Crawl running..." : "Crawl queued...";
+      setStatus(label);
+      pollTimer = setTimeout(() => pollJob(jobId), 1500);
       return;
     }
-    if (job.status === "failed") {
-      setMessage(`Crawl failed: ${job.error || "Unknown error"}`, true);
+
+    if (data.status === "failed") {
+      setStatus(`Crawl failed: ${data.error || "unknown error"}`);
       return;
     }
-    if (job.status === "completed") {
-      const report = await loadReport(jobId);
-      renderSummary(report, jobId);
-      renderFindings(report);
-      setMessage("Crawl complete.");
+
+    if (data.status === "completed") {
+      const reportRes = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/report`);
+      const report = await reportRes.json();
+      if (!reportRes.ok) {
+        setStatus(`Failed to load report: ${report.detail || "unknown error"}`);
+        return;
+      }
+      renderReport(report, jobId);
     }
   } catch (error) {
-    setMessage(`Polling failed: ${error.message}`, true);
+    setStatus(`Network error: ${error.message}`);
   }
 }
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
-  resetReportView();
-  setMessage("Submitting crawl job...");
+  resetView();
 
   const payload = {
-    url: document.getElementById("start-url").value.trim(),
+    url: urlInput.value.trim(),
     max_pages: Number(document.getElementById("max-pages").value || 8),
     max_depth: Number(document.getElementById("max-depth").value || 2),
     timeout_ms: Number(document.getElementById("timeout-ms").value || 20000),
@@ -162,18 +209,12 @@ form.addEventListener("submit", async (event) => {
     });
     const data = await response.json();
     if (!response.ok) {
-      throw new Error(data.detail || "Could not create crawl job");
+      setStatus(`Could not start crawl: ${data.detail || "unknown error"}`);
+      return;
     }
-    setMessage(`Job ${data.job_id} created. Running crawl...`);
-    setStatus({
-      job_id: data.job_id,
-      url: payload.url,
-      status: data.status,
-      pages_crawled: 0,
-      bugs_found: 0,
-    });
-    await pollJob(data.job_id);
+    setStatus(`Job created: ${data.job_id}. Running crawl...`);
+    pollJob(data.job_id);
   } catch (error) {
-    setMessage(error.message, true);
+    setStatus(`Request failed: ${error.message}`);
   }
 });
