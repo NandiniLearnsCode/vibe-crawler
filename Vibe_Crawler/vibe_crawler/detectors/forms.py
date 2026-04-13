@@ -19,25 +19,10 @@ class FormsDetector:
         form_candidates = await ctx.page.evaluate(
             """
             () => {
-              function cssPath(el) {
-                const parts = [];
-                while (el && el.nodeType === Node.ELEMENT_NODE && parts.length < 5) {
-                  let selector = el.nodeName.toLowerCase();
-                  if (el.id) {
-                    selector += "#" + el.id;
-                    parts.unshift(selector);
-                    break;
-                  }
-                  const cls = Array.from(el.classList).slice(0, 2).join(".");
-                  if (cls) selector += "." + cls;
-                  parts.unshift(selector);
-                  el = el.parentElement;
-                }
-                return parts.join(" > ");
-              }
-
               const forms = Array.from(document.querySelectorAll("form"));
               const output = [];
+              let formProbeCounter = 0;
+              let submitProbeCounter = 0;
               for (const form of forms) {
                 if (output.length >= 6) break;
                 const rect = form.getBoundingClientRect();
@@ -52,12 +37,24 @@ class FormsDetector:
                 const requiredCount = controls.filter(el => el.required).length;
                 const hasPassword = inputTypes.includes("password");
                 const hasSubmit = Boolean(form.querySelector("button[type='submit'], input[type='submit'], button:not([type])"));
-                const submitSelector = form.querySelector("button[type='submit'], input[type='submit'], button:not([type])");
+                const submitEl = form.querySelector("button[type='submit'], input[type='submit'], button:not([type])");
                 const textSignals = `${form.id} ${form.className} ${form.getAttribute("action") || ""}`.toLowerCase();
                 const likelySimple = controls.length <= 12 && controls.length > 0;
 
+                formProbeCounter += 1;
+                const formProbeId = `qa-form-probe-${formProbeCounter}`;
+                form.setAttribute("data-qa-form-probe", formProbeId);
+
+                let submitSelector = null;
+                if (submitEl) {
+                  submitProbeCounter += 1;
+                  const submitProbeId = `qa-submit-probe-${submitProbeCounter}`;
+                  submitEl.setAttribute("data-qa-submit-probe", submitProbeId);
+                  submitSelector = `[data-qa-submit-probe="${submitProbeId}"]`;
+                }
+
                 output.push({
-                  selector: cssPath(form),
+                  selector: `[data-qa-form-probe="${formProbeId}"]`,
                   action: form.getAttribute("action") || "",
                   method: (form.getAttribute("method") || "get").toLowerCase(),
                   hasPassword,
@@ -67,7 +64,7 @@ class FormsDetector:
                   inputTypes,
                   likelySimple,
                   textSignals,
-                  submitSelector: submitSelector ? cssPath(submitSelector) : null,
+                  submitSelector,
                 });
               }
               return output;
@@ -115,9 +112,12 @@ class FormsDetector:
                 continue
 
             submit_selector = form["submitSelector"]
-            disabled = await ctx.page.evaluate(
-                "(sel) => Boolean(document.querySelector(sel)?.disabled)", submit_selector
-            )
+            try:
+                disabled = await ctx.page.evaluate(
+                    "(sel) => Boolean(document.querySelector(sel)?.disabled)", submit_selector
+                )
+            except Exception:
+                continue
             if disabled:
                 bugs.append(
                     BugReport(

@@ -43,29 +43,8 @@ class DeadButtonsDetector:
               const actionWords = /(sign up|get started|submit|contact|send|continue|next|join|book|try|start)/i;
               const nodeList = Array.from(document.querySelectorAll("button, a, [role='button'], input[type='button']"));
 
-              function cssPath(el) {
-                if (!(el instanceof Element)) return "";
-                const parts = [];
-                while (el && el.nodeType === Node.ELEMENT_NODE && parts.length < 5) {
-                  let selector = el.nodeName.toLowerCase();
-                  if (el.id) {
-                    selector += "#" + el.id;
-                    parts.unshift(selector);
-                    break;
-                  }
-                  const cls = Array.from(el.classList).slice(0, 2).join(".");
-                  if (cls) selector += "." + cls;
-                  const siblings = el.parentNode ? Array.from(el.parentNode.children).filter(n => n.nodeName === el.nodeName) : [];
-                  if (siblings.length > 1) {
-                    selector += `:nth-of-type(${siblings.indexOf(el) + 1})`;
-                  }
-                  parts.unshift(selector);
-                  el = el.parentElement;
-                }
-                return parts.join(" > ");
-              }
-
               const output = [];
+              let probeCounter = 0;
               for (const el of nodeList) {
                 if (output.length >= 12) break;
                 const rect = el.getBoundingClientRect();
@@ -80,8 +59,11 @@ class DeadButtonsDetector:
                 const suspiciousHref = href === "#" || href.startsWith("javascript:");
                 if (!actionWords.test(text) && !suspiciousHref && role !== "button") continue;
 
+                probeCounter += 1;
+                const probeId = `qa-click-probe-${probeCounter}`;
+                el.setAttribute("data-qa-click-probe", probeId);
                 output.push({
-                  selector: cssPath(el),
+                  selector: `[data-qa-click-probe="${probeId}"]`,
                   text,
                   href,
                 });
