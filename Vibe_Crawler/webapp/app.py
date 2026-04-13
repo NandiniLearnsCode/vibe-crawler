@@ -162,6 +162,11 @@ async def home() -> HTMLResponse:
     return HTMLResponse(content=html_path.read_text(), status_code=200)
 
 
+@app.get("/healthz")
+async def healthz() -> dict[str, str]:
+    return {"status": "ok"}
+
+
 @app.post("/api/jobs", response_model=CrawlResponse)
 async def submit_job(request: CrawlRequest) -> CrawlResponse:
     job = await _create_job(request)

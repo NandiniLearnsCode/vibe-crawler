@@ -140,6 +140,47 @@ What the UI does:
 - render grouped bug findings by severity
 - show screenshot path and evidence fields
 
+## Deploy for sharing (recommended: Render)
+
+Fastest way to get a public URL for advisors/professors is Render.
+
+### One-click-ish setup with `render.yaml`
+
+This repo now includes a Render blueprint at the repository root:
+- `render.yaml`
+
+It creates:
+- a **Web Service** (FastAPI app),
+- a persistent disk mounted at `/workspace/Vibe_Crawler/artifacts` (stores reports + screenshots).
+
+### Deploy steps
+
+1. Push your branch to GitHub.
+2. In Render, choose **New +** -> **Blueprint**.
+3. Connect this GitHub repo and select branch `cursor/mvp-deterministic-crawler-a9f6`.
+4. Deploy.
+5. Open the generated `onrender.com` URL and submit a crawl job.
+
+### If you prefer manual Web Service setup
+
+Use:
+- Root Directory: `Vibe_Crawler`
+- Build Command:  
+  `pip install -r requirements.txt && python -m playwright install chromium`
+- Start Command:  
+  `./start.sh`
+- Runtime: Python 3.12+
+
+Add persistent disk:
+- Mount Path: `/workspace/Vibe_Crawler/artifacts`
+- Name: `vibe-artifacts`
+
+### Notes for demos
+
+- First crawl can be slower (cold start + browser startup).
+- Keep crawl limits small for live demos (`max_pages=6`, `max_depth=2`).
+- Reports are available in UI and via `/api/jobs/{job_id}/download`.
+
 Useful flags:
 
 ```text

@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: vibe-crawler-dashboard
+    runtime: docker
+    plan: free
+    rootDir: Vibe_Crawler
+    dockerfilePath: ./Dockerfile
+    autoDeploy: true
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"

@@ -10,3 +10,4 @@ __pycache__/
 Vibe_Crawler/.venv/
 Vibe_Crawler/artifacts/
 Vibe_Crawler/webapp/jobs/*.json
+Vibe_Crawler/webapp/jobs/*.json
