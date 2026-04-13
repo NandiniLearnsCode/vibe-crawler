@@ -156,6 +156,7 @@ What the UI does:
 - render grouped bug findings by severity
 - show screenshot path and evidence fields
 - provide downloads for report JSON and (for agentic runs) triage JSON + markdown
+- provide a shareable rendered report page at `/share/{job_id}` for completed agentic runs
 
 ## Deploy for sharing (recommended: Render)
 

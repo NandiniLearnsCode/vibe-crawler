@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import html
 import json
 import logging
 import uuid
@@ -170,6 +171,50 @@ def _load_report_payload(report_path: str) -> dict[str, Any]:
     return json.loads(Path(report_path).read_text())
 
 
+def _markdown_to_html(markdown: str) -> str:
+    lines = markdown.splitlines()
+    output: list[str] = []
+    in_list = False
+    for raw in lines:
+        line = raw.strip()
+        if not line:
+            if in_list:
+                output.append("</ul>")
+                in_list = False
+            continue
+        if line.startswith("### "):
+            if in_list:
+                output.append("</ul>")
+                in_list = False
+            output.append(f"<h3>{html.escape(line[4:])}</h3>")
+            continue
+        if line.startswith("## "):
+            if in_list:
+                output.append("</ul>")
+                in_list = False
+            output.append(f"<h2>{html.escape(line[3:])}</h2>")
+            continue
+        if line.startswith("# "):
+            if in_list:
+                output.append("</ul>")
+                in_list = False
+            output.append(f"<h1>{html.escape(line[2:])}</h1>")
+            continue
+        if line.startswith("- "):
+            if not in_list:
+                output.append("<ul>")
+                in_list = True
+            output.append(f"<li>{html.escape(line[2:])}</li>")
+            continue
+        if in_list:
+            output.append("</ul>")
+            in_list = False
+        output.append(f"<p>{html.escape(line)}</p>")
+    if in_list:
+        output.append("</ul>")
+    return "\n".join(output)
+
+
 @app.get("/", response_class=HTMLResponse)
 async def home() -> HTMLResponse:
     html_path = TEMPLATES_DIR / "index.html"
@@ -248,3 +293,67 @@ async def download_agentic_markdown(job_id: str) -> FileResponse:
     if not triage_path.exists():
         raise HTTPException(status_code=404, detail="Agentic markdown file missing")
     return FileResponse(path=triage_path, filename=f"{job_id}-agentic-output.md")
+
+
+@app.get("/share/{job_id}", response_class=HTMLResponse)
+async def share_agentic_report(job_id: str) -> HTMLResponse:
+    job = _jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status != "completed":
+        raise HTTPException(status_code=409, detail="Job has not completed")
+    if not job.agentic_markdown_path:
+        raise HTTPException(status_code=404, detail="Agentic share report unavailable for this run")
+    md_path = Path(job.agentic_markdown_path)
+    if not md_path.exists():
+        raise HTTPException(status_code=404, detail="Agentic markdown file missing")
+    markdown = md_path.read_text()
+    rendered = _markdown_to_html(markdown)
+    body = f"""<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Agentic Triage Report {html.escape(job_id)}</title>
+    <style>
+      body {{
+        font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        margin: 0;
+        background: #0b1220;
+        color: #e5e7eb;
+      }}
+      .container {{
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 24px;
+      }}
+      .card {{
+        background: #111827;
+        border: 1px solid #334155;
+        border-radius: 12px;
+        padding: 20px;
+      }}
+      h1, h2, h3 {{ color: #f8fafc; }}
+      p, li {{ line-height: 1.6; }}
+      a {{ color: #93c5fd; }}
+      .meta {{ color: #94a3b8; margin-bottom: 18px; }}
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <section class="card">
+        <div class="meta">
+          Run: {html.escape(job_id)} | URL: {html.escape(job.url)} | Finished: {html.escape(job.finished_at or "n/a")}
+        </div>
+        {rendered}
+        <hr />
+        <p>
+          <a href="/api/jobs/{html.escape(job_id)}/download">Download full report JSON</a> |
+          <a href="/api/jobs/{html.escape(job_id)}/download/agentic-json">Download triage JSON</a> |
+          <a href="/api/jobs/{html.escape(job_id)}/download/agentic-markdown">Download triage Markdown</a>
+        </p>
+      </section>
+    </main>
+  </body>
+</html>"""
+    return HTMLResponse(content=body, status_code=200)

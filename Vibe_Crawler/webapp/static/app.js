@@ -13,6 +13,8 @@ const agenticJsonLink = document.getElementById("agentic-json-link");
 const agenticJsonLinkWrap = document.getElementById("agentic-json-link-wrap");
 const agenticMdLink = document.getElementById("agentic-md-link");
 const agenticMdLinkWrap = document.getElementById("agentic-md-link-wrap");
+const agenticShareLink = document.getElementById("agentic-share-link");
+const agenticShareLinkWrap = document.getElementById("agentic-share-link-wrap");
 const emptyFindings = document.getElementById("empty-findings");
 const pageMeta = document.getElementById("page-meta");
 
@@ -28,6 +30,7 @@ function resetView() {
   reportLinkWrap.classList.add("hidden");
   agenticJsonLinkWrap.classList.add("hidden");
   agenticMdLinkWrap.classList.add("hidden");
+  agenticShareLinkWrap.classList.add("hidden");
   emptyFindings.classList.add("hidden");
   pageMeta.textContent = "";
 }
@@ -166,6 +169,8 @@ function renderReport(report, jobId, jobMeta = null) {
   if (jobMeta && jobMeta.agentic_markdown_path) {
     agenticMdLink.href = `/api/jobs/${encodeURIComponent(jobId)}/download/agentic-markdown`;
     agenticMdLinkWrap.classList.remove("hidden");
+    agenticShareLink.href = `/share/${encodeURIComponent(jobId)}`;
+    agenticShareLinkWrap.classList.remove("hidden");
   }
 }
 
