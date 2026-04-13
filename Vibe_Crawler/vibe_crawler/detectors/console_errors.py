@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from urllib.parse import urlparse
-
 from vibe_crawler.models import BugReport
 
 from .base import PageScanContext
+from vibe_crawler.url_utils import hosts_match
 
 IGNORE_ERROR_SNIPPETS = (
     "favicon.ico",
@@ -58,7 +57,7 @@ class ConsoleErrorsDetector:
         for response in ctx.page_record.error_responses:
             if response.resource_type not in {"script", "stylesheet"}:
                 continue
-            if urlparse(response.url).netloc and urlparse(response.url).netloc != ctx.config.root_domain:
+            if not hosts_match(response.url, ctx.config.root_domain):
                 continue
 
             bugs.append(

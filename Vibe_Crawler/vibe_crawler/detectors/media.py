@@ -3,6 +3,7 @@ from __future__ import annotations
 from urllib.parse import urlparse
 
 from vibe_crawler.models import BugReport
+from vibe_crawler.url_utils import canonical_domain
 
 from .base import PageScanContext
 
@@ -65,7 +66,7 @@ class MediaDetector:
         for response in ctx.page_record.error_responses:
             if response.resource_type not in {"image", "media"}:
                 continue
-            if urlparse(response.url).netloc and urlparse(response.url).netloc != ctx.config.root_domain:
+            if canonical_domain(urlparse(response.url).netloc) != ctx.config.root_domain:
                 continue
             bugs.append(
                 BugReport(

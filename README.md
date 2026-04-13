@@ -67,6 +67,13 @@ Vibe_Crawler/
 ├── crawler.py                           # CLI entrypoint
 ├── agent.py                             # Backward-compatible entrypoint
 ├── requirements.txt
+├── webapp/
+│   ├── app.py                           # FastAPI backend + job runner
+│   ├── static/
+│   │   ├── app.css
+│   │   └── app.js
+│   └── templates/
+│       └── index.html
 ├── docs/
 │   └── IMPLEMENTATION_PLAN.md
 ├── examples/
@@ -99,10 +106,8 @@ From repository root:
 
 ```bash
 cd Vibe_Crawler
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-playwright install chromium
+python3 -m pip install -r requirements.txt
+python3 -m playwright install chromium
 ```
 
 ## Run a crawl
@@ -119,6 +124,21 @@ Use config file:
 ```bash
 python crawler.py --config examples/sample_config.json
 ```
+
+## Run web UI (URL submit + report viewer)
+
+```bash
+cd Vibe_Crawler
+uvicorn webapp.app:app --reload
+```
+
+Then open `http://127.0.0.1:8000` in your browser.
+
+What the UI does:
+- submit crawl jobs with URL + limits
+- poll job status
+- render grouped bug findings by severity
+- show screenshot path and evidence fields
 
 Useful flags:
 

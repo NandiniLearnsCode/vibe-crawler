@@ -22,6 +22,7 @@ from vibe_crawler.frontier import UrlFrontier
 from vibe_crawler.models import BugReport, CrawlReport, NetworkErrorResponse, NetworkFailure, PageRecord
 from vibe_crawler.reporting import assign_bug_ids, deduplicate_bugs
 from vibe_crawler.url_utils import (
+    canonical_domain,
     is_http_url,
     is_same_domain,
     looks_dangerous,

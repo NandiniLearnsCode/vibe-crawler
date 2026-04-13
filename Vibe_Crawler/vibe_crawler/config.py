@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlparse
 
+from vibe_crawler.url_utils import canonical_domain
+
 
 DEFAULT_DANGEROUS_PATH_KEYWORDS = (
     "logout",
@@ -50,4 +52,11 @@ class CrawlConfig:
 
     @property
     def root_domain(self) -> str:
-        return urlparse(self.start_url).netloc.lower()
+        return canonical_domain(urlparse(self.start_url).netloc)
+
+    @property
+    def allowed_domains(self) -> tuple[str, ...]:
+        root = self.root_domain
+        if not root:
+            return tuple()
+        return (root,)

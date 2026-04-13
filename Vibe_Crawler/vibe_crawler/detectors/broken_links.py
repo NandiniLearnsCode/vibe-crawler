@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from urllib.parse import urlparse
-
 from vibe_crawler.models import BugReport
+from vibe_crawler.url_utils import canonical_domain
 
 from .base import PageScanContext
 
@@ -25,7 +24,7 @@ class BrokenLinksDetector:
         for link in ctx.page_record.discovered_links:
             if checked >= ctx.config.max_links_per_page:
                 break
-            if urlparse(link).netloc.lower() != ctx.config.root_domain:
+            if canonical_domain(link) not in ctx.config.allowed_domains:
                 continue
             checked += 1
 
