@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field, HttpUrl
 from vibe_crawler.agentic import AgenticRunner
 from vibe_crawler.config import CrawlConfig
 from vibe_crawler.orchestrator import CrawlOrchestrator
-from vibe_crawler.reporting import human_summary, save_json_report
+from vibe_crawler.reporting import human_summary, save_agentic_outputs, save_json_report
 
 log = logging.getLogger(__name__)
 
@@ -60,6 +60,8 @@ class JobState:
     finished_at: str | None = None
     error: str | None = None
     report_path: str | None = None
+    agentic_json_path: str | None = None
+    agentic_markdown_path: str | None = None
     summary: str | None = None
     pages_crawled: int = 0
     bugs_found: int = 0
@@ -74,6 +76,8 @@ class JobState:
             "finished_at": self.finished_at,
             "error": self.error,
             "report_path": self.report_path,
+            "agentic_json_path": self.agentic_json_path,
+            "agentic_markdown_path": self.agentic_markdown_path,
             "summary": self.summary,
             "pages_crawled": self.pages_crawled,
             "bugs_found": self.bugs_found,
@@ -131,10 +135,14 @@ async def _run_crawl_job(job: JobState, request: CrawlRequest) -> None:
             orchestrator = CrawlOrchestrator(config=config, headless=True)
             report = await orchestrator.run()
         save_json_report(report, report_path)
+        triage_outputs = save_agentic_outputs(report, report_path)
 
         job.status = "completed"
         job.finished_at = datetime.now(timezone.utc).isoformat()
         job.report_path = str(report_path)
+        if triage_outputs:
+            job.agentic_json_path = str(triage_outputs[0])
+            job.agentic_markdown_path = str(triage_outputs[1])
         job.summary = human_summary(report)
         job.pages_crawled = len(report.pages)
         job.bugs_found = len(report.bugs)
@@ -214,3 +222,29 @@ async def download_report(job_id: str) -> FileResponse:
     if not report_path.exists():
         raise HTTPException(status_code=404, detail="Report file missing")
     return FileResponse(path=report_path, filename=f"{job_id}-report.json")
+
+
+@app.get("/api/jobs/{job_id}/download/agentic-json")
+async def download_agentic_json(job_id: str) -> FileResponse:
+    job = _jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if not job.agentic_json_path:
+        raise HTTPException(status_code=404, detail="Agentic JSON unavailable for this run")
+    triage_path = Path(job.agentic_json_path)
+    if not triage_path.exists():
+        raise HTTPException(status_code=404, detail="Agentic JSON file missing")
+    return FileResponse(path=triage_path, filename=f"{job_id}-agentic-output.json")
+
+
+@app.get("/api/jobs/{job_id}/download/agentic-markdown")
+async def download_agentic_markdown(job_id: str) -> FileResponse:
+    job = _jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if not job.agentic_markdown_path:
+        raise HTTPException(status_code=404, detail="Agentic markdown unavailable for this run")
+    triage_path = Path(job.agentic_markdown_path)
+    if not triage_path.exists():
+        raise HTTPException(status_code=404, detail="Agentic markdown file missing")
+    return FileResponse(path=triage_path, filename=f"{job_id}-agentic-output.md")

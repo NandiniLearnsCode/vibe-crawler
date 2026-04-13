@@ -9,5 +9,5 @@ __pycache__/
 # local runtime artifacts
 Vibe_Crawler/.venv/
 Vibe_Crawler/artifacts/
-Vibe_Crawler/webapp/jobs/*.json
+artifacts/
 Vibe_Crawler/webapp/jobs/*.json

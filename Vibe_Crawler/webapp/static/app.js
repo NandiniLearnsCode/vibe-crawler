@@ -1,6 +1,6 @@
 const form = document.getElementById("crawl-form");
 const urlInput = document.getElementById("url-input");
-const modeSelect = document.getElementById("crawl-mode");
+const modeCheckbox = document.getElementById("agentic-mode");
 const statusCard = document.getElementById("status-card");
 const statusText = document.getElementById("status-text");
 const summaryCard = document.getElementById("summary-card");
@@ -9,6 +9,10 @@ const findingsContainer = document.getElementById("findings-container");
 const pagesContainer = document.getElementById("pages-container");
 const reportLink = document.getElementById("report-link");
 const reportLinkWrap = document.getElementById("report-link-wrap");
+const agenticJsonLink = document.getElementById("agentic-json-link");
+const agenticJsonLinkWrap = document.getElementById("agentic-json-link-wrap");
+const agenticMdLink = document.getElementById("agentic-md-link");
+const agenticMdLinkWrap = document.getElementById("agentic-md-link-wrap");
 const emptyFindings = document.getElementById("empty-findings");
 const pageMeta = document.getElementById("page-meta");
 
@@ -22,6 +26,8 @@ function resetView() {
   findingsContainer.innerHTML = "";
   pagesContainer.innerHTML = "";
   reportLinkWrap.classList.add("hidden");
+  agenticJsonLinkWrap.classList.add("hidden");
+  agenticMdLinkWrap.classList.add("hidden");
   emptyFindings.classList.add("hidden");
   pageMeta.textContent = "";
 }
@@ -137,12 +143,13 @@ function renderPages(report) {
   }
 }
 
-function renderReport(report, jobId) {
+function renderReport(report, jobId, jobMeta = null) {
   summaryCard.hidden = false;
   statusCard.hidden = true;
 
   const summary = report.summary || {};
   document.getElementById("run-id").textContent = report.run_id || "n/a";
+  document.getElementById("run-mode").textContent = report.mode || "deterministic";
   document.getElementById("pages-crawled").textContent = summary.pages_crawled ?? 0;
   document.getElementById("total-bugs").textContent = summary.total_bugs ?? 0;
   renderSeverity(summary);
@@ -151,6 +158,15 @@ function renderReport(report, jobId) {
 
   reportLink.href = `/api/jobs/${encodeURIComponent(jobId)}/download`;
   reportLinkWrap.classList.remove("hidden");
+
+  if (jobMeta && jobMeta.agentic_json_path) {
+    agenticJsonLink.href = `/api/jobs/${encodeURIComponent(jobId)}/download/agentic-json`;
+    agenticJsonLinkWrap.classList.remove("hidden");
+  }
+  if (jobMeta && jobMeta.agentic_markdown_path) {
+    agenticMdLink.href = `/api/jobs/${encodeURIComponent(jobId)}/download/agentic-markdown`;
+    agenticMdLinkWrap.classList.remove("hidden");
+  }
 }
 
 async function pollJob(jobId) {
@@ -182,7 +198,7 @@ async function pollJob(jobId) {
         setStatus(`Failed to load report: ${report.detail || "unknown error"}`);
         return;
       }
-      renderReport(report, jobId);
+      renderReport(report, jobId, data);
     }
   } catch (error) {
     setStatus(`Network error: ${error.message}`);
@@ -195,7 +211,7 @@ form.addEventListener("submit", async (event) => {
 
   const payload = {
     url: urlInput.value.trim(),
-    mode: modeSelect ? modeSelect.value : "deterministic",
+    mode: modeCheckbox && modeCheckbox.checked ? "agentic" : "deterministic",
     max_pages: Number(document.getElementById("max-pages").value || 8),
     max_depth: Number(document.getElementById("max-depth").value || 2),
     timeout_ms: Number(document.getElementById("timeout-ms").value || 20000),

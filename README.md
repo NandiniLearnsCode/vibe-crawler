@@ -125,6 +125,11 @@ Run in agentic-triage mode (deterministic tools + bounded follow-up planning):
 python crawler.py --url https://example.com --mode agentic
 ```
 
+When mode is `agentic`, the run now emits three artifacts:
+- base report JSON (configured `--output`)
+- `*-agentic-output.json` (structured triage summary + action trace + prioritized findings)
+- `*-agentic-output.md` (human-readable triage summary for sharing)
+
 Use config file:
 
 ```bash
@@ -150,6 +155,7 @@ What the UI does:
 - poll job status
 - render grouped bug findings by severity
 - show screenshot path and evidence fields
+- provide downloads for report JSON and (for agentic runs) triage JSON + markdown
 
 ## Deploy for sharing (recommended: Render)
 
