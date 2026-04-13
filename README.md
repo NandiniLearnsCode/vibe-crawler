@@ -1,224 +1,204 @@
-# 🕷️ Vibe Crawler
+# MVP Website QA Crawler (Deterministic)
 
-An AI-powered agent that crawls websites and automatically surfaces bugs. Built with [Playwright](https://playwright.dev/python/) for browser automation and [Claude](https://anthropic.com) as the reasoning engine.
+Practical crawler agent for public websites that finds **high-confidence, obvious bugs** with screenshots and structured JSON output.
 
----
+This version intentionally prioritizes:
 
-## What It Does
+- reliability over sophistication,
+- deterministic checks over AI reasoning,
+- bounded and safe crawling,
+- fast implementation with modular detector architecture.
 
-Vibe Crawler sends an AI agent to browse your website the way a QA engineer would. It navigates pages, clicks interactive elements, reads content, and uses judgment to decide what's worth investigating — then writes up everything it finds in plain English.
+## What this MVP does
 
-Unlike a simple linter or static checker, the agent *reasons* about what it sees. It can tell the difference between a button that looks broken and one that actually is, notice when placeholder text was never replaced, and follow leads across pages.
+Given a starting URL, the crawler:
 
-**What it detects:**
+1. Crawls key internal pages with page/depth limits.
+2. Runs deterministic bug detectors.
+3. Captures screenshots.
+4. Produces structured bug reports:
+   - `id`
+   - `type`
+   - `severity`
+   - `confidence`
+   - `page_url`
+   - `element_selector` (optional)
+   - `short_title`
+   - `description`
+   - `reproduction_steps`
+   - `screenshot_path`
+   - `console_errors` (optional)
+   - `network_evidence` (optional)
 
-| Bug Type | Example |
-|---|---|
-| `js_error` | Uncaught TypeError thrown on page load |
-| `broken_link` | Link returns 404 |
-| `broken_form` | Form submits but nothing happens |
-| `placeholder_text` | "Lorem ipsum" or "TODO" visible to users |
-| `missing_resource` | Image or API call fails to load |
-| `http_error` | Page returns 500 Internal Server Error |
-| `dead_interaction` | Button has no click handler attached |
-| `layout_issue` | Element overflows or renders incorrectly |
+## Supported bug types (V1)
 
-Each bug is reported with a **severity** (high / medium / low), the **URL** where it was found, and a plain English **description**.
+1. Broken internal links (`broken_link`)
+2. Dead buttons/interactions (`dead_button`)
+3. Basic form failures (`form_failure`)
+4. Missing images/media (`missing_media`)
+5. Mobile layout issues (`mobile_layout`)
+6. Critical frontend runtime/asset errors (`critical_frontend_error`)
 
----
+## Safety and crawl bounds
+
+- Same-domain crawling by default.
+- Configurable max pages and max depth.
+- Per-page timeout.
+- Dangerous/destructive paths skipped (`logout`, `payment`, `delete`, etc.).
+- No login flows in this first version.
 
 ## Architecture
 
-The project has two layers:
+Detailed plan: [`Vibe_Crawler/docs/IMPLEMENTATION_PLAN.md`](Vibe_Crawler/docs/IMPLEMENTATION_PLAN.md)
 
-### 1. `crawler.py` — The Browser Layer
-A Playwright-based page walker. Given a URL, it:
-- Navigates the page in a real Chromium browser
-- Captures console errors and warnings
-- Records failed network requests
-- Collects all links for further crawling
-- Optionally takes full-page screenshots
-- Supports HTTP Basic Auth
+Key runtime components:
 
-This layer is deterministic — it always visits pages in BFS order and runs the same checks every time.
+- **Crawl Orchestrator**: overall job runner
+- **URL Frontier**: prioritized deduplicated link queue
+- **Browser Runner**: Playwright navigation + event collection
+- **Detector Engine**: pluggable detector modules
+- **Evidence Collector**: screenshot handling
+- **Report Generator**: JSON + human summary output
 
-### 2. `agent.py` — The AI Layer
-A Claude-powered agent that *drives* the crawler. Instead of visiting every page mechanically, Claude decides:
-- Which pages are worth visiting
-- Which elements are worth clicking
-- When something looks suspicious enough to dig into
-- When it has found everything there is to find
+## File structure
 
-The agent runs a **ReAct loop** (Reasoning + Acting):
+```text
+Vibe_Crawler/
+├── crawler.py                           # CLI entrypoint
+├── agent.py                             # Backward-compatible entrypoint
+├── requirements.txt
+├── docs/
+│   └── IMPLEMENTATION_PLAN.md
+├── examples/
+│   ├── sample_config.json
+│   └── example_report.json
+└── vibe_crawler/
+    ├── __init__.py
+    ├── cli.py
+    ├── config.py
+    ├── evidence.py
+    ├── frontier.py
+    ├── models.py
+    ├── orchestrator.py
+    ├── reporting.py
+    ├── url_utils.py
+    └── detectors/
+        ├── __init__.py
+        ├── base.py
+        ├── broken_links.py
+        ├── console_errors.py
+        ├── dead_buttons.py
+        ├── forms.py
+        ├── media.py
+        └── mobile_layout.py
 ```
-User: "Audit this website"
-  ↓
-Claude: thinks → calls navigate(url)
-  ↓
-Result: {status, console_errors, links}
-  ↓
-Claude: thinks → calls click_element(url, selector)
-  ↓
-Result: {errors triggered by click}
-  ↓
-Claude: thinks → calls report_bug(...)
-  ↓
-... continues until Claude calls done()
-```
 
-Claude has access to five tools:
+## Local setup
 
-| Tool | What it does |
-|---|---|
-| `navigate(url)` | Visit a page, get status + errors + links |
-| `click_element(url, selector)` | Click something, observe what breaks |
-| `get_page_text(url)` | Read page content, look for placeholder text |
-| `report_bug(...)` | Log a confirmed bug |
-| `done(summary)` | End the investigation, write the final report |
+From repository root:
 
-The agent stops when Claude determines there are no more leads to investigate and calls `done()`. A configurable `--max-steps` cap (default: 50 tool calls) acts as a safety limit.
-
----
-
-## Setup
-
-**Requirements:**
-- Python 3.11+
-- An [Anthropic API key](https://console.anthropic.com)
-
-**Install dependencies:**
 ```bash
+cd Vibe_Crawler
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 playwright install chromium
 ```
 
-**Set your API key:**
+## Run a crawl
+
+Basic run:
+
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-...
+cd Vibe_Crawler
+python crawler.py --url https://example.com
 ```
 
-To make this permanent, add the line above to your `~/.zshrc` or `~/.bashrc`.
+Use config file:
 
----
-
-## Usage
-
-**Basic audit:**
 ```bash
-python agent.py --url https://your-site.com
+python crawler.py --config examples/sample_config.json
 ```
 
-**Watch Claude reason in real time:**
-```bash
-python agent.py --url https://your-site.com --verbose
+Useful flags:
+
+```text
+--url <url>
+--config <path>
+--max-pages <int>
+--max-depth <int>
+--timeout-ms <int>
+--output <report-path>
+--screenshots-dir <dir>
+--no-mobile
+--no-form-checks
+--headed
+--log-level DEBUG|INFO|WARNING|ERROR
 ```
 
-**With HTTP Basic Auth:**
-```bash
-python agent.py --url https://your-site.com --username admin --password secret
+## Sample crawl job
+
+`examples/sample_config.json`:
+
+```json
+{
+  "start_url": "https://example.com",
+  "max_pages": 8,
+  "max_depth": 2,
+  "timeout_ms": 12000,
+  "same_domain_only": true,
+  "include_mobile_checks": true,
+  "desktop_viewport": [1366, 900],
+  "mobile_viewport": [390, 844],
+  "screenshot_dir": "artifacts/screenshots",
+  "output_path": "artifacts/reports/example-report.json",
+  "dangerous_path_keywords": [
+    "logout",
+    "delete",
+    "remove",
+    "payment",
+    "checkout",
+    "billing",
+    "admin/delete"
+  ],
+  "important_path_keywords": [
+    "pricing",
+    "signup",
+    "login",
+    "contact",
+    "product",
+    "docs",
+    "about"
+  ]
+}
 ```
 
-**Save results to a JSON file:**
-```bash
-python agent.py --url https://your-site.com --output report.json
-```
+## Example output bug report
 
-**Run the browser visibly (non-headless):**
-```bash
-python agent.py --url https://your-site.com --no-headless
-```
+See [`Vibe_Crawler/examples/example_report.json`](Vibe_Crawler/examples/example_report.json).
 
-**Limit the number of agent steps:**
-```bash
-python agent.py --url https://your-site.com --max-steps 20
-```
+## Small test plan
 
-**All options:**
-```
---url           Root URL to audit (required)
---username      HTTP Basic Auth username
---password      HTTP Basic Auth password
---max-steps     Maximum tool calls before forced stop (default: 50)
---no-headless   Show the browser window while crawling
---verbose       Print Claude's reasoning between each tool call
---output        Save full bug report to a JSON file
-```
+1. **Smoke run**
+   - Run against `https://example.com`.
+   - Verify report JSON is generated and no crashes occur.
+2. **Broken-link fixture**
+   - Run against a test site with known 404 internal links.
+   - Verify `broken_link` findings and confidence scores.
+3. **Dead button fixture**
+   - Run against a page with a no-op CTA (`href="#"` and no handlers).
+   - Verify `dead_button` detection.
+4. **Mobile fixture**
+   - Run against an intentionally overflowing mobile layout page.
+   - Verify `mobile_layout` issues are flagged.
+5. **Form fixture**
+   - Run against a simple contact form with disabled submit / no feedback.
+   - Verify `form_failure` detection.
 
----
+## Next improvements (post-MVP)
 
-## Example Output
-
-```
-🕷️  Starting vibe bug audit of https://example.com
-
-============================================================
-AUDIT COMPLETE
-============================================================
-
-The site has three issues worth fixing. The contact form on /contact
-submits successfully but no confirmation message appears and no email
-is sent — the form action points to a non-existent endpoint. The
-/team page still contains Lorem Ipsum placeholder text in two staff
-bios. The dashboard at /dashboard returns a 401 for logged-out users
-but shows a blank white page instead of redirecting to login.
-
-------------------------------------------------------------
-BUGS FOUND: 3
-------------------------------------------------------------
-
-1. 🔴 [HIGH] broken_form
-   URL: https://example.com/contact
-   Form submits to /api/contact which returns 404. No user feedback shown.
-
-2. 🟡 [MEDIUM] placeholder_text
-   URL: https://example.com/team
-   Two staff bios contain "Lorem ipsum dolor sit amet" placeholder text.
-
-3. 🟡 [MEDIUM] http_error
-   URL: https://example.com/dashboard
-   Returns 401 with blank white page instead of redirecting to /login.
-```
-
----
-
-## Rate Limits
-
-The agent uses `claude-haiku-4-5-20251001` by default, which has generous rate limits. If you want to use a more powerful model, change the `model` field in `agent.py`:
-
-```python
-model="claude-opus-4-6"  # More thorough reasoning, lower rate limits
-```
-
-Free-tier Anthropic accounts have a limit of 10,000 tokens per minute. For larger sites, consider upgrading at [console.anthropic.com](https://console.anthropic.com).
-
----
-
-## Project Structure
-
-```
-vibe-crawler/
-├── agent.py          # AI agent loop — Claude drives the investigation
-├── crawler.py        # Playwright browser layer — executes tool calls
-├── requirements.txt  # Python dependencies
-└── README.md
-```
-
----
-
-## Roadmap
-
-- [ ] Form interaction testing (fill and submit forms, not just click)
-- [ ] Mobile layout checks (resize viewport, detect overflow)
-- [ ] Visual regression via screenshot comparison
-- [ ] HTML report output with annotated screenshots
-- [ ] OAuth / cookie-based authentication support
-- [ ] Parallel crawling for large sites
-- [ ] CI/CD integration (run on every deploy)
-
----
-
-## Built With
-
-- [Playwright](https://playwright.dev/python/) — Browser automation
-- [Anthropic Claude](https://anthropic.com) — AI reasoning engine
-- Python 3.11+
+1. Queue + worker execution model (Redis/SQS + worker process).
+2. API layer for submitting jobs and fetching reports.
+3. Stronger deduplication and bug clustering.
+4. Lightweight web report viewer/dashboard.
+5. Optional LLM summarization layer on top of deterministic evidence.
