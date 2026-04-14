@@ -5,6 +5,7 @@ const statusCard = document.getElementById("status-card");
 const statusText = document.getElementById("status-text");
 const summaryCard = document.getElementById("summary-card");
 const severityContainer = document.getElementById("severity-breakdown");
+const impactContainer = document.getElementById("impact-breakdown");
 const findingsContainer = document.getElementById("findings-container");
 const pagesContainer = document.getElementById("pages-container");
 const reportLink = document.getElementById("report-link");
@@ -25,6 +26,7 @@ function resetView() {
   summaryCard.hidden = true;
   statusText.textContent = "Starting crawl...";
   severityContainer.innerHTML = "";
+  impactContainer.innerHTML = "";
   findingsContainer.innerHTML = "";
   pagesContainer.innerHTML = "";
   reportLinkWrap.classList.add("hidden");
@@ -62,6 +64,23 @@ function renderSeverity(summary) {
   }
 }
 
+function renderImpact(summary) {
+  const map = summary.bugs_by_impact || {};
+  const title = document.createElement("div");
+  title.className = "severity-title";
+  title.textContent = "Impact Areas";
+  impactContainer.appendChild(title);
+
+  const ordered = ["conversion", "usability", "trust", "cosmetic", "unclassified"];
+  for (const impact of ordered) {
+    if (!(impact in map)) continue;
+    const box = document.createElement("div");
+    box.className = "metric";
+    box.innerHTML = `<div class="k">${impact.toUpperCase()}</div><div class="v">${map[impact] || 0}</div>`;
+    impactContainer.appendChild(box);
+  }
+}
+
 function renderFindings(report) {
   const bugs = report.bugs || [];
   if (!bugs.length) {
@@ -91,6 +110,9 @@ function renderFindings(report) {
       meta.appendChild(createTag(sev, sev));
       meta.appendChild(createTag(bug.type));
       meta.appendChild(createTag(`confidence ${formatPercent(bug.confidence || 0)}`));
+      if (bug.impact_area) {
+        meta.appendChild(createTag(`impact ${bug.impact_area}`));
+      }
 
       const title = document.createElement("div");
       title.className = "bug-title";
@@ -103,6 +125,14 @@ function renderFindings(report) {
       const desc = document.createElement("p");
       desc.textContent = bug.description;
 
+      const journey = document.createElement("div");
+      journey.className = "bug-meta";
+      journey.textContent = `journey: ${bug.affected_journey || "general navigation"}`;
+
+      const impact = document.createElement("p");
+      impact.className = "impact-note";
+      impact.textContent = `Why this matters: ${bug.impact_reason || "Adds friction to user success."}`;
+
       const steps = document.createElement("ol");
       steps.className = "steps";
       for (const step of bug.reproduction_steps || []) {
@@ -111,7 +141,7 @@ function renderFindings(report) {
         steps.appendChild(li);
       }
 
-      card.append(meta, title, bugMeta, desc, steps);
+      card.append(meta, title, bugMeta, desc, journey, impact, steps);
 
       if (bug.screenshot_path) {
         const screenshot = document.createElement("div");
@@ -156,6 +186,7 @@ function renderReport(report, jobId, jobMeta = null) {
   document.getElementById("pages-crawled").textContent = summary.pages_crawled ?? 0;
   document.getElementById("total-bugs").textContent = summary.total_bugs ?? 0;
   renderSeverity(summary);
+  renderImpact(summary);
   renderFindings(report);
   renderPages(report);
 

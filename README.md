@@ -29,6 +29,9 @@ Given a starting URL, the crawler:
    - `screenshot_path`
    - `console_errors` (optional)
    - `network_evidence` (optional)
+   - `impact_area` (`conversion | usability | trust | cosmetic`)
+   - `affected_journey` (where in user journey this hurts)
+   - `impact_reason` ("why this matters" rationale)
 
 ## Supported bug types (V1)
 
@@ -154,6 +157,7 @@ What the UI does:
 - choose deterministic vs agentic run mode
 - poll job status
 - render grouped bug findings by severity
+- render grouped impact breakdown (conversion/usability/trust/cosmetic)
 - show screenshot path and evidence fields
 - provide downloads for report JSON and (for agentic runs) triage JSON + markdown
 - provide a shareable rendered report page at `/share/{job_id}` for completed agentic runs

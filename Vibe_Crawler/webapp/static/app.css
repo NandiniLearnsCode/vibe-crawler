@@ -105,6 +105,18 @@ button:disabled {
   gap: 10px;
 }
 
+#severity-breakdown,
+#impact-breakdown {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+#impact-breakdown .severity-title {
+  grid-column: 1 / -1;
+  margin-bottom: 0;
+}
+
 .metric {
   background: #0b1220;
   border: 1px solid #334155;
@@ -181,6 +193,13 @@ button:disabled {
 
 .steps li {
   margin-bottom: 4px;
+}
+
+.impact-note {
+  margin: 10px 0 6px;
+  border-left: 3px solid #3b82f6;
+  padding-left: 10px;
+  color: #bfdbfe;
 }
 
 .hidden {

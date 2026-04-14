@@ -39,6 +39,9 @@ class BugReport:
     console_errors: list[str] = field(default_factory=list)
     network_evidence: list[str] = field(default_factory=list)
     detector: str | None = None
+    impact_area: str | None = None
+    affected_journey: str | None = None
+    impact_reason: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -93,14 +96,18 @@ class CrawlReport:
     def summary(self) -> dict[str, Any]:
         by_severity = {"high": 0, "medium": 0, "low": 0}
         by_type: dict[str, int] = {}
+        by_impact: dict[str, int] = {}
         for bug in self.bugs:
             by_severity[bug.severity] = by_severity.get(bug.severity, 0) + 1
             by_type[bug.type] = by_type.get(bug.type, 0) + 1
+            impact_bucket = bug.impact_area or "unclassified"
+            by_impact[impact_bucket] = by_impact.get(impact_bucket, 0) + 1
         return {
             "pages_crawled": len(self.pages),
             "total_bugs": len(self.bugs),
             "bugs_by_severity": by_severity,
             "bugs_by_type": by_type,
+            "bugs_by_impact": by_impact,
         }
 
 
