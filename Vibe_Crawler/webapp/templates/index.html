@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vibe Crawler QA Dashboard</title>
+    <link rel="stylesheet" href="/static/app.css" />
+  </head>
+  <body>
+    <main class="container">
+      <header>
+        <h1>Vibe Crawler QA Dashboard</h1>
+        <p class="subtitle">Submit a public URL and get a detailed bug report (deterministic or agentic triage mode).</p>
+      </header>
+
+      <section class="card">
+        <h2>Run Crawl</h2>
+        <form id="crawl-form">
+          <label for="url-input">Start URL</label>
+          <input id="url-input" type="url" required placeholder="https://example.com" />
+
+          <div id="settings-form" class="grid" style="margin-top: 12px">
+            <div>
+              <label for="max-pages">Max pages</label>
+              <input id="max-pages" name="max_pages" type="number" min="1" max="40" value="8" />
+            </div>
+            <div>
+              <label for="max-depth">Max depth</label>
+              <input id="max-depth" name="max_depth" type="number" min="0" max="5" value="2" />
+            </div>
+            <div>
+              <label for="timeout-ms">Timeout (ms)</label>
+              <input id="timeout-ms" name="timeout_ms" type="number" min="1000" max="120000" value="20000" />
+            </div>
+          </div>
+
+          <label class="checkbox-row">
+            <input id="mobile-checks" name="include_mobile_checks" type="checkbox" checked />
+            Include mobile checks
+          </label>
+          <label class="checkbox-row">
+            <input id="form-checks" name="include_form_checks" type="checkbox" checked />
+            Include form checks
+          </label>
+          <label class="checkbox-row">
+            <input id="agentic-mode" name="agentic_mode" type="checkbox" />
+            Agentic triage mode (bounded follow-up actions)
+          </label>
+
+          <div style="margin-top: 14px">
+            <button type="submit">Start crawl</button>
+          </div>
+        </form>
+      </section>
+
+      <section id="status-card" class="card" hidden>
+        <h2>Status</h2>
+        <p id="status-text" class="status">Idle</p>
+      </section>
+
+      <section id="summary-card" class="card" hidden>
+        <h2>Report Summary</h2>
+        <div class="summary-grid">
+          <div class="metric"><div class="k">Run ID</div><div class="v" id="run-id">-</div></div>
+          <div class="metric"><div class="k">Mode</div><div class="v" id="run-mode">-</div></div>
+          <div class="metric"><div class="k">Pages Crawled</div><div class="v" id="pages-crawled">0</div></div>
+          <div class="metric"><div class="k">Total Bugs</div><div class="v" id="total-bugs">0</div></div>
+        </div>
+        <div id="severity-breakdown" style="margin-top: 12px"></div>
+        <div id="impact-breakdown" style="margin-top: 12px"></div>
+        <p id="report-link-wrap" class="hidden" style="margin-top: 10px">
+          <a id="report-link" href="#" target="_blank">Download report JSON</a>
+        </p>
+        <p id="agentic-json-link-wrap" class="hidden" style="margin-top: 6px">
+          <a id="agentic-json-link" href="#" target="_blank">Download agentic output JSON</a>
+        </p>
+        <p id="agentic-md-link-wrap" class="hidden" style="margin-top: 6px">
+          <a id="agentic-md-link" href="#" target="_blank">Download agentic output Markdown</a>
+        </p>
+        <p id="agentic-share-link-wrap" class="hidden" style="margin-top: 6px">
+          <a id="agentic-share-link" href="#" target="_blank">Open share page</a>
+        </p>
+      </section>
+
+      <section class="card">
+        <h2>Findings</h2>
+        <p id="empty-findings" class="muted hidden">No bugs in this run.</p>
+        <div id="findings-container"></div>
+      </section>
+
+      <section class="card">
+        <h2>Pages Crawled</h2>
+        <p id="page-meta" class="muted"></p>
+        <ul id="pages-container"></ul>
+      </section>
+    </main>
+    <script src="/static/app.js"></script>
+  </body>
+</html>
