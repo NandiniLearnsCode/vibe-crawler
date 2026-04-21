@@ -105,6 +105,30 @@ button:disabled {
   gap: 10px;
 }
 
+.digest-card {
+  margin-top: 14px;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  padding: 12px;
+  background: #0b1220;
+}
+
+.digest-card h3 {
+  margin: 0 0 8px;
+}
+
+.digest-card p {
+  margin: 8px 0;
+}
+
+.digest-list {
+  margin: 8px 0 0 18px;
+}
+
+.digest-list li {
+  margin-bottom: 4px;
+}
+
 .metric {
   background: #0b1220;
   border: 1px solid #334155;

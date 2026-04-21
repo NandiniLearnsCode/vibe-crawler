@@ -10,6 +10,9 @@ def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+SEVERITY_PRIORITY = {"high": 0, "medium": 1, "low": 2}
+
+
 @dataclass(slots=True)
 class NetworkFailure:
     url: str
@@ -77,6 +80,35 @@ class CrawlReport:
     mode: str = "deterministic"
     agent_trace: list[dict[str, Any]] = field(default_factory=list)
 
+    def executive_digest(self) -> dict[str, Any]:
+        bugs_sorted = sorted(
+            self.bugs,
+            key=lambda bug: (
+                SEVERITY_PRIORITY.get(bug.severity, 3),
+                -bug.confidence,
+            ),
+        )
+        top_issues = [
+            {
+                "id": bug.id,
+                "title": bug.short_title,
+                "type": bug.type,
+                "severity": bug.severity,
+                "confidence": bug.confidence,
+                "page_url": bug.page_url,
+            }
+            for bug in bugs_sorted[:3]
+        ]
+        next_actions = [
+            f"Fix [{bug.severity.upper()}] {bug.short_title} on {bug.page_url}"
+            for bug in bugs_sorted[:3]
+        ]
+        return {
+            "headline": self._digest_headline(),
+            "top_issues": top_issues,
+            "next_actions": next_actions,
+        }
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "run_id": self.run_id,
@@ -85,6 +117,7 @@ class CrawlReport:
             "finished_at": self.finished_at,
             "mode": self.mode,
             "summary": self.summary(),
+            "digest": self.executive_digest(),
             "pages": [page.to_dict() for page in self.pages],
             "bugs": [bug.to_dict() for bug in self.bugs],
             "agent_trace": self.agent_trace,
@@ -102,6 +135,22 @@ class CrawlReport:
             "bugs_by_severity": by_severity,
             "bugs_by_type": by_type,
         }
+
+    def _digest_headline(self) -> str:
+        if not self.bugs:
+            return "No high-confidence issues detected in the scanned scope."
+        counts = self.summary()["bugs_by_severity"]
+        high = counts.get("high", 0)
+        medium = counts.get("medium", 0)
+        if high > 0:
+            return (
+                f"Immediate attention: {high} high-severity issue(s) can impact key user flows."
+            )
+        if medium > 0:
+            return (
+                f"Moderate risk: {medium} medium-severity issue(s) may reduce conversion or usability."
+            )
+        return "Mostly healthy: only low-severity issues were found."
 
 
 @dataclass(slots=True)

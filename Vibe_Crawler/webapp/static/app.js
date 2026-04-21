@@ -5,6 +5,10 @@ const statusCard = document.getElementById("status-card");
 const statusText = document.getElementById("status-text");
 const summaryCard = document.getElementById("summary-card");
 const severityContainer = document.getElementById("severity-breakdown");
+const digestCard = document.getElementById("digest-card");
+const digestHeadline = document.getElementById("digest-headline");
+const digestTopFindings = document.getElementById("digest-priority-list");
+const digestFixFirst = document.getElementById("digest-fix-first-list");
 const findingsContainer = document.getElementById("findings-container");
 const pagesContainer = document.getElementById("pages-container");
 const reportLink = document.getElementById("report-link");
@@ -23,8 +27,12 @@ let pollTimer = null;
 function resetView() {
   statusCard.hidden = false;
   summaryCard.hidden = true;
+  digestCard.hidden = true;
   statusText.textContent = "Starting crawl...";
   severityContainer.innerHTML = "";
+  digestHeadline.textContent = "";
+  digestTopFindings.innerHTML = "";
+  digestFixFirst.innerHTML = "";
   findingsContainer.innerHTML = "";
   pagesContainer.innerHTML = "";
   reportLinkWrap.classList.add("hidden");
@@ -135,6 +143,45 @@ function renderFindings(report) {
   }
 }
 
+function renderDigest(report) {
+  const digest = report.digest;
+  if (!digest) {
+    digestCard.hidden = true;
+    return;
+  }
+  digestCard.hidden = false;
+  digestHeadline.textContent = digest.headline || "Crawl digest unavailable";
+
+  digestTopFindings.innerHTML = "";
+  for (const finding of digest.fix_first || []) {
+    const li = document.createElement("li");
+    li.className = "bug-meta";
+    const confidence = formatPercent(finding.confidence || 0);
+    li.textContent = `[${(finding.severity || "medium").toUpperCase()}] ${finding.title || "Untitled"} (${confidence})`;
+    digestTopFindings.appendChild(li);
+  }
+  if (!digestTopFindings.children.length) {
+    const li = document.createElement("li");
+    li.className = "bug-meta";
+    li.textContent = "No critical findings in this crawl.";
+    digestTopFindings.appendChild(li);
+  }
+
+  digestFixFirst.innerHTML = "";
+  for (const action of digest.next_actions || []) {
+    const li = document.createElement("li");
+    li.className = "bug-meta";
+    li.textContent = action;
+    digestFixFirst.appendChild(li);
+  }
+  if (!digestFixFirst.children.length) {
+    const li = document.createElement("li");
+    li.className = "bug-meta";
+    li.textContent = "No urgent fixes recommended.";
+    digestFixFirst.appendChild(li);
+  }
+}
+
 function renderPages(report) {
   const pages = report.pages || [];
   pageMeta.textContent = `${pages.length} page(s) crawled`;
@@ -156,6 +203,7 @@ function renderReport(report, jobId, jobMeta = null) {
   document.getElementById("pages-crawled").textContent = summary.pages_crawled ?? 0;
   document.getElementById("total-bugs").textContent = summary.total_bugs ?? 0;
   renderSeverity(summary);
+  renderDigest(report);
   renderFindings(report);
   renderPages(report);
 
