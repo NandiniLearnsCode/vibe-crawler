@@ -47,6 +47,7 @@ class CrawlConfig:
     output_path: Path = Path("artifacts/report.json")
     include_mobile_checks: bool = True
     include_form_checks: bool = True
+    presentation_mode: str = "founder"
     dangerous_path_keywords: tuple[str, ...] = field(default_factory=lambda: DEFAULT_DANGEROUS_PATH_KEYWORDS)
     important_path_keywords: tuple[str, ...] = field(default_factory=lambda: DEFAULT_IMPORTANT_PATH_KEYWORDS)
 

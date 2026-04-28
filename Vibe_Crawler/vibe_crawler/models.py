@@ -78,6 +78,7 @@ class CrawlReport:
     bugs: list[BugReport]
     output_path: Path | None = None
     mode: str = "deterministic"
+    presentation_mode: str = "founder"
     agent_trace: list[dict[str, Any]] = field(default_factory=list)
 
     def executive_digest(self) -> dict[str, Any]:
@@ -116,6 +117,7 @@ class CrawlReport:
             "started_at": self.started_at,
             "finished_at": self.finished_at,
             "mode": self.mode,
+            "presentation_mode": self.presentation_mode,
             "summary": self.summary(),
             "digest": self.executive_digest(),
             "pages": [page.to_dict() for page in self.pages],

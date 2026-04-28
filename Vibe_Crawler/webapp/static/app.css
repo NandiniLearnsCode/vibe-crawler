@@ -129,6 +129,13 @@ button:disabled {
   margin-bottom: 4px;
 }
 
+.digest-subtitle {
+  margin-top: 12px;
+  margin-bottom: 6px;
+  font-size: 0.9rem;
+  color: #cbd5e1;
+}
+
 .metric {
   background: #0b1220;
   border: 1px solid #334155;

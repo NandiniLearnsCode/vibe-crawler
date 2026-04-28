@@ -1,14 +1,17 @@
 const form = document.getElementById("crawl-form");
 const urlInput = document.getElementById("url-input");
 const modeCheckbox = document.getElementById("agentic-mode");
+const founderModeCheckbox = document.getElementById("founder-mode");
 const statusCard = document.getElementById("status-card");
 const statusText = document.getElementById("status-text");
 const summaryCard = document.getElementById("summary-card");
 const severityContainer = document.getElementById("severity-breakdown");
 const digestCard = document.getElementById("digest-card");
+const digestTitle = document.getElementById("digest-title");
 const digestHeadline = document.getElementById("digest-headline");
-const digestTopFindings = document.getElementById("digest-priority-list");
-const digestFixFirst = document.getElementById("digest-fix-first-list");
+const digestHighlights = document.getElementById("digest-highlights");
+const digestTopFindings = document.getElementById("digest-top-findings");
+const digestFixFirst = document.getElementById("digest-fix-first");
 const findingsContainer = document.getElementById("findings-container");
 const pagesContainer = document.getElementById("pages-container");
 const reportLink = document.getElementById("report-link");
@@ -28,9 +31,11 @@ function resetView() {
   statusCard.hidden = false;
   summaryCard.hidden = true;
   digestCard.hidden = true;
+  digestTitle.textContent = "Founder TL;DR";
   statusText.textContent = "Starting crawl...";
   severityContainer.innerHTML = "";
   digestHeadline.textContent = "";
+  digestHighlights.innerHTML = "";
   digestTopFindings.innerHTML = "";
   digestFixFirst.innerHTML = "";
   findingsContainer.innerHTML = "";
@@ -150,10 +155,28 @@ function renderDigest(report) {
     return;
   }
   digestCard.hidden = false;
+  const founderMode = digest.founder_mode || {};
+  const isFounderView = (digest.default_view || "founder") === "founder";
+  digestTitle.textContent = isFounderView ? "Founder TL;DR (default)" : "Digest";
   digestHeadline.textContent = digest.headline || "Crawl digest unavailable";
 
+  digestHighlights.innerHTML = "";
+  const summaryLines = founderMode.three_line_summary || digest.highlights || [];
+  for (const line of summaryLines) {
+    const li = document.createElement("li");
+    li.className = "bug-meta";
+    li.textContent = line;
+    digestHighlights.appendChild(li);
+  }
+  if (!digestHighlights.children.length) {
+    const li = document.createElement("li");
+    li.className = "bug-meta";
+    li.textContent = "Summary unavailable for this run.";
+    digestHighlights.appendChild(li);
+  }
+
   digestTopFindings.innerHTML = "";
-  for (const finding of digest.fix_first || []) {
+  for (const finding of founderMode.top_blockers || digest.fix_first || []) {
     const li = document.createElement("li");
     li.className = "bug-meta";
     const confidence = formatPercent(finding.confidence || 0);
@@ -168,16 +191,16 @@ function renderDigest(report) {
   }
 
   digestFixFirst.innerHTML = "";
-  for (const action of digest.next_actions || []) {
+  for (const ticket of founderMode.engineering_ticket_list || []) {
     const li = document.createElement("li");
     li.className = "bug-meta";
-    li.textContent = action;
+    li.textContent = ticket;
     digestFixFirst.appendChild(li);
   }
   if (!digestFixFirst.children.length) {
     const li = document.createElement("li");
     li.className = "bug-meta";
-    li.textContent = "No urgent fixes recommended.";
+    li.textContent = "No engineering tickets generated.";
     digestFixFirst.appendChild(li);
   }
 }
@@ -265,6 +288,7 @@ form.addEventListener("submit", async (event) => {
   const payload = {
     url: urlInput.value.trim(),
     mode: modeCheckbox && modeCheckbox.checked ? "agentic" : "deterministic",
+    view_mode: founderModeCheckbox && founderModeCheckbox.checked ? "founder" : "detailed",
     max_pages: Number(document.getElementById("max-pages").value || 8),
     max_depth: Number(document.getElementById("max-depth").value || 2),
     timeout_ms: Number(document.getElementById("timeout-ms").value || 20000),

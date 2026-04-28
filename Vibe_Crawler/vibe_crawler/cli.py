@@ -38,6 +38,12 @@ def parse_args() -> argparse.Namespace:
         default=80,
         help="Agentic mode only: max follow-up actions",
     )
+    parser.add_argument(
+        "--presentation-mode",
+        choices=("founder", "detailed"),
+        default="founder",
+        help="Report presentation mode (founder is concise default).",
+    )
     parser.add_argument("--log-level", default="INFO", help="Logging level (DEBUG, INFO, WARNING...)")
     return parser.parse_args()
 
@@ -117,6 +123,7 @@ def build_config(args: argparse.Namespace) -> CrawlConfig:
             _coalesce(json_cfg.get("important_path_keywords")),
             CrawlConfig(start_url=start_url).important_path_keywords,
         ),
+        presentation_mode=str(_coalesce(json_cfg.get("presentation_mode"), args.presentation_mode)),
     )
 
 
@@ -136,8 +143,8 @@ async def async_main() -> int:
         orchestrator = CrawlOrchestrator(config=config, headless=not args.headed)
         report = await orchestrator.run()
 
-    save_json_report(report, config.output_path)
-    triage_outputs = save_agentic_outputs(report, config.output_path)
+    save_json_report(report, config.output_path, presentation_mode=config.presentation_mode)
+    triage_outputs = save_agentic_outputs(report, config.output_path, presentation_mode=config.presentation_mode)
     print(human_summary(report))
     print(f"\nJSON report saved to: {config.output_path}")
     if triage_outputs:

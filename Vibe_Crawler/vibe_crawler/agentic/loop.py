@@ -93,6 +93,7 @@ class AgenticRunner:
             bugs=deduped,
             output_path=self.config.output_path,
             mode="agentic-triage",
+            presentation_mode=self.config.presentation_mode,
             agent_trace=trace,
         )
         return report

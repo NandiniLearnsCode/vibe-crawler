@@ -46,6 +46,10 @@
             <input id="agentic-mode" name="agentic_mode" type="checkbox" />
             Agentic triage mode (bounded follow-up actions)
           </label>
+          <label class="checkbox-row">
+            <input id="founder-mode" name="founder_mode" type="checkbox" checked />
+            Founder mode summary (default)
+          </label>
 
           <div style="margin-top: 14px">
             <button type="submit">Start crawl</button>
@@ -61,9 +65,12 @@
       <section id="summary-card" class="card" hidden>
         <h2>Report Summary</h2>
         <div id="digest-card" class="digest" hidden>
-          <h3>TL;DR</h3>
+          <h3 id="digest-title">Founder TL;DR</h3>
           <p id="digest-headline" class="digest-headline"></p>
+          <ul id="digest-highlights" class="digest-list"></ul>
+          <h4 class="digest-subtitle">Top Blockers</h4>
           <ul id="digest-top-findings" class="digest-list"></ul>
+          <h4 class="digest-subtitle">Copy/Paste Ticket List</h4>
           <ul id="digest-fix-first" class="digest-list"></ul>
         </div>
         <div class="summary-grid">

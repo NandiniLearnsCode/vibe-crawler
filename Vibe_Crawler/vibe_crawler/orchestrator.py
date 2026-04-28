@@ -132,6 +132,7 @@ class CrawlOrchestrator:
             bugs=deduped_bugs,
             output_path=self.config.output_path,
             mode="deterministic",
+            presentation_mode=self.config.presentation_mode,
         )
         return report
 

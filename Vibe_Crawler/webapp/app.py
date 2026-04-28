@@ -44,6 +44,7 @@ class CrawlRequest(BaseModel):
     include_mobile_checks: bool = True
     include_form_checks: bool = True
     mode: str = Field(default="deterministic", pattern="^(deterministic|agentic)$")
+    view_mode: str = Field(default="founder", pattern="^(founder|detailed)$")
 
 
 class CrawlResponse(BaseModel):
@@ -126,6 +127,7 @@ async def _run_crawl_job(job: JobState, request: CrawlRequest) -> None:
             timeout_ms=request.timeout_ms,
             include_mobile_checks=request.include_mobile_checks,
             include_form_checks=request.include_form_checks,
+            presentation_mode=request.view_mode,
             screenshot_dir=screenshot_dir,
             output_path=report_path,
         )
@@ -135,8 +137,8 @@ async def _run_crawl_job(job: JobState, request: CrawlRequest) -> None:
         else:
             orchestrator = CrawlOrchestrator(config=config, headless=True)
             report = await orchestrator.run()
-        save_json_report(report, report_path)
-        triage_outputs = save_agentic_outputs(report, report_path)
+        save_json_report(report, report_path, presentation_mode=config.presentation_mode)
+        triage_outputs = save_agentic_outputs(report, report_path, presentation_mode=config.presentation_mode)
 
         job.status = "completed"
         job.finished_at = datetime.now(timezone.utc).isoformat()
