@@ -129,6 +129,61 @@ button:disabled {
   margin-bottom: 4px;
 }
 
+.integration-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.integration-box {
+  border: 1px solid #334155;
+  border-radius: 10px;
+  padding: 10px;
+  background: #0b1220;
+}
+
+.inline-form {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.inline-form input[type="text"] {
+  flex: 1;
+}
+
+.preview {
+  margin-top: 8px;
+  max-height: 180px;
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  background: #020617;
+  color: #cbd5e1;
+  font-size: 0.78rem;
+  white-space: pre-wrap;
+}
+
+.confirm-row {
+  margin-top: 8px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.confirm-row button {
+  padding: 6px 10px;
+  font-size: 0.8rem;
+}
+
+.integration-status {
+  margin-top: 8px;
+  font-size: 0.78rem;
+  color: #94a3b8;
+}
+
 .digest-subtitle {
   margin-top: 12px;
   margin-bottom: 6px;

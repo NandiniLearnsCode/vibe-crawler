@@ -173,13 +173,20 @@ The reporting pipeline now adds two actionability layers:
   - CSV (`*-tickets.csv`) for spreadsheet workflows
 
 In the web API:
-- `GET /api/jobs/{job_id}/download/tickets-markdown`
-- `GET /api/jobs/{job_id}/download/tickets-csv`
+- `GET /api/jobs/{job_id}/download/tickets/md`
+- `GET /api/jobs/{job_id}/download/tickets/csv`
+- `GET /api/jobs/{job_id}/download/tickets/github`
+- `GET /api/jobs/{job_id}/download/tickets/linear`
+- `POST /api/jobs/{job_id}/export/preview` (preview payload before push)
+- `POST /api/jobs/{job_id}/export/confirm` (confirm direct push)
 
 In the dashboard:
 - **Download ticket list (Markdown)**
 - **Download ticket list (CSV)**
+- **Download GitHub Issues format**
+- **Download Linear format**
 - **Copy ticket block** button (copies founder ticket list to clipboard)
+- **Preview + Confirm push** flows for GitHub and Linear
 
 ## Deploy for sharing (recommended: Render)
 

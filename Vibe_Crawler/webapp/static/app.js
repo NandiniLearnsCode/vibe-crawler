@@ -21,6 +21,18 @@ const ticketMarkdownLinkWrap = document.getElementById("ticket-markdown-link-wra
 const ticketCsvLink = document.getElementById("ticket-csv-link");
 const ticketCsvLinkWrap = document.getElementById("ticket-csv-link-wrap");
 const copyTicketsButton = document.getElementById("copy-tickets-btn");
+const ticketGithubLink = document.getElementById("ticket-github-link");
+const ticketGithubLinkWrap = document.getElementById("ticket-github-link-wrap");
+const ticketLinearLink = document.getElementById("ticket-linear-link");
+const ticketLinearLinkWrap = document.getElementById("ticket-linear-link-wrap");
+const pushGithubPreviewButton = document.getElementById("push-github-preview-btn");
+const pushLinearPreviewButton = document.getElementById("push-linear-preview-btn");
+const pushStatusText = document.getElementById("push-status-text");
+const pushPreviewCard = document.getElementById("push-preview-card");
+const pushPreviewTitle = document.getElementById("push-preview-title");
+const pushPreviewBody = document.getElementById("push-preview-body");
+const pushConfirmButton = document.getElementById("push-confirm-btn");
+const pushCancelButton = document.getElementById("push-cancel-btn");
 const agenticJsonLink = document.getElementById("agentic-json-link");
 const agenticJsonLinkWrap = document.getElementById("agentic-json-link-wrap");
 const agenticMdLink = document.getElementById("agentic-md-link");
@@ -31,6 +43,7 @@ const emptyFindings = document.getElementById("empty-findings");
 const pageMeta = document.getElementById("page-meta");
 
 let pollTimer = null;
+let pendingPushAction = null;
 
 function resetView() {
   statusCard.hidden = false;
@@ -48,9 +61,14 @@ function resetView() {
   reportLinkWrap.classList.add("hidden");
   ticketMarkdownLinkWrap.classList.add("hidden");
   ticketCsvLinkWrap.classList.add("hidden");
+  ticketGithubLinkWrap.classList.add("hidden");
+  ticketLinearLinkWrap.classList.add("hidden");
   agenticJsonLinkWrap.classList.add("hidden");
   agenticMdLinkWrap.classList.add("hidden");
   agenticShareLinkWrap.classList.add("hidden");
+  pushPreviewCard.hidden = true;
+  pushStatusText.textContent = "";
+  pendingPushAction = null;
   emptyFindings.classList.add("hidden");
   pageMeta.textContent = "";
 }
@@ -243,7 +261,7 @@ async function copyTicketsToClipboard(jobId, report) {
   }
   if (!text) {
     try {
-      const response = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/download/tickets-markdown`);
+      const response = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/download/tickets/md`);
       if (response.ok) {
         text = await response.text();
       }
@@ -263,6 +281,51 @@ async function copyTicketsToClipboard(jobId, report) {
     }, 1500);
   } catch (error) {
     alert("Could not copy tickets. You can download the markdown file instead.");
+  }
+}
+
+function showPushPreview(kind, payload, jobId) {
+  pendingPushAction = { kind, jobId };
+  pushPreviewCard.hidden = false;
+  pushPreviewTitle.textContent = kind === "github" ? "GitHub Push Preview" : "Linear Push Preview";
+  pushPreviewBody.textContent = payload;
+  pushStatusText.textContent = `Preview ready. Confirm to push to ${kind === "github" ? "GitHub Issues" : "Linear"}.`;
+}
+
+async function requestPushPreview(jobId, target) {
+  try {
+    const response = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/push-preview/${target}`);
+    const data = await response.json();
+    if (!response.ok) {
+      pushStatusText.textContent = `Preview failed: ${data.detail || "unknown error"}`;
+      return;
+    }
+    showPushPreview(target, data.preview || "", jobId);
+  } catch (error) {
+    pushStatusText.textContent = `Preview failed: ${error.message}`;
+  }
+}
+
+async function confirmPush() {
+  if (!pendingPushAction) return;
+  const { jobId, kind } = pendingPushAction;
+  try {
+    const response = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/push-confirm/${kind}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      pushStatusText.textContent = `Push failed: ${data.detail || "unknown error"}`;
+      return;
+    }
+    const count = data.items_created ?? 0;
+    pushStatusText.textContent = `Push successful: created ${count} ${kind === "github" ? "GitHub issue(s)" : "Linear issue(s)"}.`;
+    pushPreviewCard.hidden = true;
+    pendingPushAction = null;
+  } catch (error) {
+    pushStatusText.textContent = `Push failed: ${error.message}`;
   }
 }
 
@@ -294,12 +357,22 @@ function renderReport(report, jobId, jobMeta = null) {
 
   reportLink.href = `/api/jobs/${encodeURIComponent(jobId)}/download`;
   reportLinkWrap.classList.remove("hidden");
-  ticketMarkdownLink.href = `/api/jobs/${encodeURIComponent(jobId)}/download/tickets-markdown`;
+  ticketMarkdownLink.href = `/api/jobs/${encodeURIComponent(jobId)}/download/tickets/md`;
   ticketMarkdownLinkWrap.classList.remove("hidden");
-  ticketCsvLink.href = `/api/jobs/${encodeURIComponent(jobId)}/download/tickets-csv`;
+  ticketCsvLink.href = `/api/jobs/${encodeURIComponent(jobId)}/download/tickets/csv`;
   ticketCsvLinkWrap.classList.remove("hidden");
+  ticketGithubLink.href = `/api/jobs/${encodeURIComponent(jobId)}/download/tickets/github`;
+  ticketGithubLinkWrap.classList.remove("hidden");
+  ticketLinearLink.href = `/api/jobs/${encodeURIComponent(jobId)}/download/tickets/linear`;
+  ticketLinearLinkWrap.classList.remove("hidden");
   copyTicketsButton.onclick = () => {
     copyTicketsToClipboard(jobId, report);
+  };
+  pushGithubPreviewButton.onclick = () => {
+    requestPushPreview(jobId, "github");
+  };
+  pushLinearPreviewButton.onclick = () => {
+    requestPushPreview(jobId, "linear");
   };
 
   if (jobMeta && jobMeta.agentic_json_path) {
@@ -313,6 +386,13 @@ function renderReport(report, jobId, jobMeta = null) {
     agenticShareLinkWrap.classList.remove("hidden");
   }
 }
+
+pushConfirmButton.addEventListener("click", confirmPush);
+pushCancelButton.addEventListener("click", () => {
+  pushPreviewCard.hidden = true;
+  pendingPushAction = null;
+  pushStatusText.textContent = "Push cancelled.";
+});
 
 async function pollJob(jobId) {
   if (pollTimer) clearTimeout(pollTimer);

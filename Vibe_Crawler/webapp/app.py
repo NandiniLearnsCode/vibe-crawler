@@ -4,6 +4,10 @@ import asyncio
 import html
 import json
 import logging
+import os
+import time
+import urllib.error
+import urllib.request
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -19,7 +23,7 @@ from pydantic import BaseModel, Field, HttpUrl
 from vibe_crawler.agentic import AgenticRunner
 from vibe_crawler.config import CrawlConfig
 from vibe_crawler.orchestrator import CrawlOrchestrator
-from vibe_crawler.reporting import human_summary, save_agentic_outputs, save_json_report
+from vibe_crawler.reporting import human_summary, save_agentic_outputs, save_json_report, save_ticket_exports
 
 log = logging.getLogger(__name__)
 
@@ -52,6 +56,18 @@ class CrawlResponse(BaseModel):
     status: str
 
 
+class TicketPushPreviewRequest(BaseModel):
+    provider: str = Field(pattern="^(github|linear)$")
+    github_repo: str | None = None
+    linear_team_id: str | None = None
+    linear_label_ids: list[str] = Field(default_factory=list)
+    max_tickets: int = Field(default=20, ge=1, le=100)
+
+
+class TicketPushConfirmRequest(BaseModel):
+    preview_token: str = Field(min_length=8)
+
+
 @dataclass(slots=True)
 class JobState:
     job_id: str
@@ -62,8 +78,8 @@ class JobState:
     finished_at: str | None = None
     error: str | None = None
     report_path: str | None = None
-    ticket_export_json_path: str | None = None
     ticket_export_markdown_path: str | None = None
+    ticket_export_csv_path: str | None = None
     agentic_json_path: str | None = None
     agentic_markdown_path: str | None = None
     summary: str | None = None
@@ -80,14 +96,25 @@ class JobState:
             "finished_at": self.finished_at,
             "error": self.error,
             "report_path": self.report_path,
-            "ticket_export_json_path": self.ticket_export_json_path,
             "ticket_export_markdown_path": self.ticket_export_markdown_path,
+            "ticket_export_csv_path": self.ticket_export_csv_path,
             "agentic_json_path": self.agentic_json_path,
             "agentic_markdown_path": self.agentic_markdown_path,
             "summary": self.summary,
             "pages_crawled": self.pages_crawled,
             "bugs_found": self.bugs_found,
         }
+
+
+@dataclass(slots=True)
+class TicketPushPreviewState:
+    preview_token: str
+    job_id: str
+    provider: str
+    target: str
+    tickets: list[dict[str, Any]]
+    metadata: dict[str, Any] = field(default_factory=dict)
+    created_at: float = field(default_factory=time.time)
 
 
 app = FastAPI(title="Vibe Crawler UI API", version="0.1.0")
