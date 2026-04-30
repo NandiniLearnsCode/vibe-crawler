@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import csv
+import io
 import json
+import re
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
@@ -8,6 +11,26 @@ from typing import Any
 from vibe_crawler.models import BugReport, CrawlReport
 
 SEVERITY_ORDER = {"high": 0, "medium": 1, "low": 2}
+WORD_RE = re.compile(r"[a-z0-9]+")
+URL_RE = re.compile(r"https?://[^\s'\"<>]+", re.IGNORECASE)
+PATH_RE = re.compile(r"/[A-Za-z0-9._~:/?#\\[\\]@!$&'()*+,;=%-]+")
+HREF_RE = re.compile(r"href\\s*=\\s*['\"]([^'\"]+)['\"]", re.IGNORECASE)
+STOPWORDS = {
+    "the",
+    "and",
+    "for",
+    "with",
+    "from",
+    "that",
+    "this",
+    "page",
+    "link",
+    "button",
+    "form",
+    "error",
+    "failed",
+    "missing",
+}
 
 
 def assign_bug_ids(run_id: str, bugs: list[BugReport]) -> list[BugReport]:
@@ -37,7 +60,46 @@ def deduplicate_bugs(bugs: list[BugReport]) -> list[BugReport]:
     return output
 
 
-def build_digest(report: CrawlReport, *, presentation_mode: str = "founder") -> dict[str, Any]:
+def build_issue_clusters(bugs: list[BugReport]) -> list[dict[str, Any]]:
+    grouped: dict[tuple[str, str], list[BugReport]] = defaultdict(list)
+    for bug in bugs:
+        grouped[(bug.type, _root_cause_signature(bug))].append(bug)
+
+    clusters: list[dict[str, Any]] = []
+    for (bug_type, root_cause), items in grouped.items():
+        affected_pages = sorted({item.page_url for item in items})
+        highest = min((item.severity for item in items), key=lambda sev: SEVERITY_ORDER.get(sev, 99))
+        sample_ids = [item.id for item in items[:3]]
+        sample_titles = [item.short_title for item in items[:3]]
+        clusters.append(
+            {
+                "type": bug_type,
+                "root_cause_hint": root_cause,
+                "severity_highest": highest,
+                "occurrences": len(items),
+                "affected_pages": affected_pages,
+                "sample_bug_ids": sample_ids,
+                "sample_titles": sample_titles,
+                "recommended_fix": _cluster_fix_hint(bug_type, root_cause),
+            }
+        )
+
+    clusters.sort(
+        key=lambda cluster: (
+            SEVERITY_ORDER.get(str(cluster.get("severity_highest", "low")), 99),
+            -int(cluster.get("occurrences", 0)),
+            str(cluster.get("type", "")),
+        )
+    )
+    for idx, cluster in enumerate(clusters, start=1):
+        cluster["cluster_id"] = f"CL-{idx:03d}"
+    return clusters
+
+
+def build_digest(
+    report: CrawlReport, *, presentation_mode: str = "founder", issue_clusters: list[dict[str, Any]] | None = None
+) -> dict[str, Any]:
+    clusters = issue_clusters if issue_clusters is not None else build_issue_clusters(report.bugs)
     summary = report.summary()
     total_bugs = summary.get("total_bugs", 0)
     by_severity = summary.get("bugs_by_severity", {})
@@ -48,6 +110,8 @@ def build_digest(report: CrawlReport, *, presentation_mode: str = "founder") -> 
         report.bugs,
         key=lambda bug: (SEVERITY_ORDER.get(bug.severity, 9), -bug.confidence),
     )[:3]
+    cluster_count = len(clusters)
+    collapsed = max(total_bugs - cluster_count, 0)
 
     if total_bugs == 0:
         headline = "No high-confidence issues were found in the scanned scope."
@@ -64,11 +128,15 @@ def build_digest(report: CrawlReport, *, presentation_mode: str = "founder") -> 
             f"{medium_count} medium-severity issue(s) can still affect user outcomes.",
             "Address medium findings next, then optional low-severity polish.",
         ]
+    if total_bugs > 0:
+        highlights.append(f"Clustering collapsed {total_bugs} findings into {cluster_count} root-cause cluster(s).")
+        if collapsed > 0:
+            highlights.append(f"{collapsed} repeated findings were grouped into shared root causes.")
 
     fix_first = [_digest_finding_item(bug) for bug in top_findings]
     next_actions = [item["quick_fix_hint"] for item in fix_first if item.get("quick_fix_hint")]
 
-    founder_mode = _build_founder_mode(report, fix_first)
+    founder_mode = _build_founder_mode(report, fix_first, clusters)
     return {
         "presentation_mode": presentation_mode,
         "default_view": "founder",
@@ -76,6 +144,11 @@ def build_digest(report: CrawlReport, *, presentation_mode: str = "founder") -> 
         "highlights": highlights,
         "fix_first": fix_first,
         "next_actions": next_actions[:3],
+        "issue_clustering": {
+            "total_clusters": cluster_count,
+            "findings_collapsed": collapsed,
+        },
+        "clustered_top_issues": clusters[:3],
         "founder_mode": founder_mode,
     }
 
@@ -119,7 +192,9 @@ def _quick_fix_hint(bug: BugReport) -> str:
     return "Reproduce locally, patch, and verify with one focused regression test."
 
 
-def _build_founder_mode(report: CrawlReport, fix_first: list[dict[str, Any]]) -> dict[str, Any]:
+def _build_founder_mode(
+    report: CrawlReport, fix_first: list[dict[str, Any]], issue_clusters: list[dict[str, Any]]
+) -> dict[str, Any]:
     summary = report.summary()
     total_bugs = summary.get("total_bugs", 0)
     severity = summary.get("bugs_by_severity", {})
@@ -140,23 +215,47 @@ def _build_founder_mode(report: CrawlReport, fix_first: list[dict[str, Any]]) ->
         else:
             line_3 = "Only low-severity findings remain; this is mostly polish work."
 
-    blockers = [
-        {
-            "id": item.get("id", ""),
-            "severity": item.get("severity", "medium"),
-            "title": item.get("title", "Untitled finding"),
-            "page_url": item.get("page_url", ""),
-            "why_now": item.get("why_now", ""),
-            "quick_fix_hint": item.get("quick_fix_hint", ""),
-        }
-        for item in fix_first[:3]
-    ]
+    blockers: list[dict[str, Any]] = []
+    for cluster in issue_clusters[:3]:
+        affected_pages = list(cluster.get("affected_pages") or [])
+        blockers.append(
+            {
+                "id": cluster.get("cluster_id", ""),
+                "cluster_id": cluster.get("cluster_id", ""),
+                "severity": cluster.get("severity_highest", "medium"),
+                "type": cluster.get("type", "unknown"),
+                "title": _cluster_title(cluster),
+                "page_url": affected_pages[0] if affected_pages else "",
+                "occurrences": int(cluster.get("occurrences", 0)),
+                "affected_pages": affected_pages,
+                "why_now": _cluster_why_now(cluster),
+                "quick_fix_hint": cluster.get("recommended_fix", "Investigate root cause and patch."),
+            }
+        )
+    if not blockers:
+        blockers = [
+            {
+                "id": item.get("id", ""),
+                "severity": item.get("severity", "medium"),
+                "type": item.get("type", "unknown"),
+                "title": item.get("title", "Untitled finding"),
+                "page_url": item.get("page_url", ""),
+                "occurrences": 1,
+                "affected_pages": [item.get("page_url", "")] if item.get("page_url") else [],
+                "why_now": item.get("why_now", ""),
+                "quick_fix_hint": item.get("quick_fix_hint", ""),
+            }
+            for item in fix_first[:3]
+        ]
 
     ticket_lines: list[str] = []
     for idx, blocker in enumerate(blockers, start=1):
+        affected = blocker.get("affected_pages") or []
+        affected_summary = f"{len(affected)} page(s)" if affected else blocker.get("page_url", "n/a")
         ticket_lines.append(
             f"{idx}. [{str(blocker.get('severity', 'medium')).upper()}] {blocker.get('title', 'Untitled finding')} "
-            f"| URL: {blocker.get('page_url', 'n/a')} "
+            f"| Cluster: {blocker.get('cluster_id', 'n/a')} "
+            f"| Scope: {affected_summary} "
             f"| Fix: {blocker.get('quick_fix_hint', 'Investigate and patch with regression check.')}"
         )
     if not ticket_lines:
@@ -170,10 +269,115 @@ def _build_founder_mode(report: CrawlReport, fix_first: list[dict[str, Any]]) ->
     }
 
 
+def _cluster_title(cluster: dict[str, Any]) -> str:
+    bug_type = str(cluster.get("type", "issue")).replace("_", " ")
+    root = str(cluster.get("root_cause_hint", "general root cause")).replace("_", " ")
+    return f"{bug_type}: {root}"
+
+
+def _cluster_why_now(cluster: dict[str, Any]) -> str:
+    occurrences = int(cluster.get("occurrences", 1))
+    severity = str(cluster.get("severity_highest", "medium"))
+    pages = len(cluster.get("affected_pages") or [])
+    if severity == "high":
+        return f"High-severity root cause repeated {occurrences} time(s) across {pages} page(s)."
+    return f"Shared issue appears {occurrences} time(s), so one fix can resolve multiple findings."
+
+
+def _cluster_fix_hint(bug_type: str, root_cause: str) -> str:
+    if bug_type == "broken_link":
+        return "Patch broken href targets/routes and add automated internal link checks."
+    if bug_type == "dead_button":
+        return "Connect button handlers/navigation and assert visible state change after click."
+    if bug_type == "form_failure":
+        return "Fix submit/validation handling and return clear success or error feedback."
+    if bug_type == "missing_media":
+        return "Correct missing asset paths/CDN references and add fallback placeholders."
+    if bug_type == "mobile_layout":
+        return "Resolve responsive CSS overflow/overlap and retest at narrow breakpoints."
+    if bug_type == "critical_frontend_error":
+        return "Fix runtime JS/asset load error causing repeated frontend failures."
+    return f"Address shared root cause: {root_cause.replace('_', ' ')}."
+
+
+def _root_cause_signature(bug: BugReport) -> str:
+    text_blob = " ".join(
+        [
+            bug.short_title or "",
+            bug.description or "",
+            bug.element_selector or "",
+            " ".join(bug.console_errors[:2]),
+            " ".join(bug.network_evidence[:2]),
+        ]
+    ).lower()
+    if bug.type == "broken_link":
+        target = _extract_url_or_path(text_blob)
+        return f"broken_target:{target or _normalized_phrase(text_blob)}"
+    if bug.type == "missing_media":
+        target = _extract_url_or_path(text_blob)
+        return f"asset:{target or _normalized_phrase(text_blob)}"
+    if bug.type == "form_failure":
+        if "required" in text_blob or "validation" in text_blob:
+            return "form_validation_missing"
+        if "disabled" in text_blob:
+            return "form_submit_disabled"
+        if "silent" in text_blob or "no response" in text_blob or "timeout" in text_blob:
+            return "form_silent_submit_failure"
+        return "form_submission_failure"
+    if bug.type == "dead_button":
+        return f"dead_click:{_selector_or_phrase(bug)}"
+    if bug.type == "mobile_layout":
+        if "overflow" in text_blob or "horizontal" in text_blob:
+            return "mobile_overflow"
+        if "off-screen" in text_blob or "offscreen" in text_blob:
+            return "mobile_offscreen_controls"
+        if "overlap" in text_blob:
+            return "mobile_overlap"
+        return "mobile_layout_breakage"
+    if bug.type == "critical_frontend_error":
+        if bug.console_errors:
+            return f"console:{_normalized_phrase(bug.console_errors[0])}"
+        return f"critical_frontend:{_normalized_phrase(text_blob)}"
+    return _normalized_phrase(text_blob)
+
+
+def _selector_or_phrase(bug: BugReport) -> str:
+    selector = (bug.element_selector or "").strip()
+    if selector:
+        href_match = HREF_RE.search(selector)
+        if href_match:
+            return href_match.group(1)
+        return _normalized_phrase(selector)
+    return _normalized_phrase(f"{bug.short_title} {bug.description}")
+
+
+def _extract_url_or_path(text: str) -> str | None:
+    url_match = URL_RE.search(text)
+    if url_match:
+        return _strip_trailing_punctuation(url_match.group(0))
+    path_match = PATH_RE.search(text)
+    if path_match:
+        path = _strip_trailing_punctuation(path_match.group(0))
+        if path and path != "/":
+            return path
+    return None
+
+
+def _strip_trailing_punctuation(value: str) -> str:
+    return value.rstrip(".,);:!?\"'")
+
+
+def _normalized_phrase(text: str) -> str:
+    tokens = [token for token in WORD_RE.findall(text.lower()) if token not in STOPWORDS and len(token) >= 3]
+    return "_".join(tokens[:6]) if tokens else "general_root_cause"
+
+
 def save_json_report(report: CrawlReport, output_path: Path, *, presentation_mode: str = "founder") -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    clusters = build_issue_clusters(report.bugs)
     payload = report.to_dict()
-    payload["digest"] = build_digest(report, presentation_mode=presentation_mode)
+    payload["digest"] = build_digest(report, presentation_mode=presentation_mode, issue_clusters=clusters)
+    payload["issue_clusters"] = clusters
     output_path.write_text(json.dumps(payload, indent=2))
 
 
@@ -198,7 +402,21 @@ def save_agentic_outputs(
     return triage_json_path, triage_md_path
 
 
+def save_ticket_exports(
+    report: CrawlReport, output_path: Path, *, presentation_mode: str = "founder"
+) -> tuple[Path, Path]:
+    clusters = build_issue_clusters(report.bugs)
+    digest = build_digest(report, presentation_mode=presentation_mode, issue_clusters=clusters)
+    founder_mode = digest.get("founder_mode") or {}
+    ticket_markdown_path = output_path.with_name(f"{output_path.stem}-tickets.md")
+    ticket_csv_path = output_path.with_name(f"{output_path.stem}-tickets.csv")
+    ticket_markdown_path.write_text(_build_ticket_markdown(report, digest, founder_mode))
+    ticket_csv_path.write_text(_build_ticket_csv(founder_mode))
+    return ticket_markdown_path, ticket_csv_path
+
+
 def _build_agentic_output(report: CrawlReport, *, presentation_mode: str = "founder") -> dict[str, Any]:
+    clusters = build_issue_clusters(report.bugs)
     actions = report.agent_trace or []
     actions_by_type: dict[str, int] = {}
     phase_counts: dict[str, int] = {}
@@ -221,7 +439,8 @@ def _build_agentic_output(report: CrawlReport, *, presentation_mode: str = "foun
         "run_id": report.run_id,
         "start_url": report.start_url,
         "mode": report.mode,
-        "digest": build_digest(report, presentation_mode=presentation_mode),
+        "digest": build_digest(report, presentation_mode=presentation_mode, issue_clusters=clusters),
+        "issue_clusters": clusters,
         "triage_summary": {
             "pages_crawled": summary.get("pages_crawled", 0),
             "total_bugs": summary.get("total_bugs", 0),
@@ -269,9 +488,12 @@ def _build_agentic_markdown(triage_output: dict[str, Any]) -> str:
         lines.append("- No blockers identified.")
     else:
         for item in top_blockers:
+            confidence_text = ""
+            if item.get("confidence") is not None:
+                confidence_text = f" | confidence {int(float(item.get('confidence', 0)) * 100)}%"
             lines.extend(
                 [
-                    f"- [{str(item.get('severity', '')).upper()}] {item.get('title', 'Untitled finding')} ({item.get('page_url', 'n/a')})",
+                    f"- [{str(item.get('severity', '')).upper()}] {item.get('title', 'Untitled finding')} ({item.get('page_url', 'n/a')}){confidence_text}",
                     f"  - Why now: {item.get('why_now', 'n/a')}",
                 ]
             )
@@ -283,6 +505,17 @@ def _build_agentic_markdown(triage_output: dict[str, Any]) -> str:
     else:
         lines.append("1. No urgent engineering tickets from this run.")
     lines.append("```")
+
+    issue_clusters = triage_output.get("issue_clusters") or []
+    lines.extend(["", "## Root Cause Clusters"])
+    if not issue_clusters:
+        lines.append("- No root-cause clusters created.")
+    else:
+        for cluster in issue_clusters[:8]:
+            lines.append(
+                f"- {cluster.get('cluster_id', 'n/a')} [{str(cluster.get('severity_highest', 'low')).upper()}] "
+                f"{cluster.get('type', 'unknown')} | {cluster.get('occurrences', 0)} finding(s)"
+            )
 
     lines.extend(
         [
@@ -348,3 +581,74 @@ def human_summary(report: CrawlReport) -> str:
             lines.append(f"- [{bug.type}] {bug.short_title} ({bug.page_url})")
         lines.append("")
     return "\n".join(lines).strip()
+
+
+def _build_ticket_markdown(report: CrawlReport, digest: dict[str, Any], founder_mode: dict[str, Any]) -> str:
+    lines = [
+        f"# Engineering Ticket Export: {report.run_id}",
+        f"- URL: {report.start_url}",
+        f"- Mode: {report.mode}",
+        f"- Presentation mode: {digest.get('presentation_mode', 'founder')}",
+        "",
+        "## 3-line summary",
+    ]
+    for entry in founder_mode.get("three_line_summary") or ["No summary available."]:
+        lines.append(f"- {entry}")
+    lines.extend(["", "## Copy/Paste Ticket List", "```text"])
+    for entry in founder_mode.get("engineering_ticket_list") or ["1. No urgent engineering tickets from this run."]:
+        lines.append(str(entry))
+    lines.extend(["```", "", "## Detailed Cluster Tickets"])
+    for idx, blocker in enumerate(founder_mode.get("top_blockers") or [], start=1):
+        pages = blocker.get("affected_pages") or []
+        lines.extend(
+            [
+                f"### Ticket {idx}: {blocker.get('title', 'Untitled finding')}",
+                f"- Severity: {str(blocker.get('severity', 'medium')).upper()}",
+                f"- Cluster: {blocker.get('cluster_id', 'n/a')}",
+                f"- Type: {blocker.get('type', 'unknown')}",
+                f"- Occurrences: {blocker.get('occurrences', 1)}",
+                f"- Affected pages: {', '.join(pages) if pages else blocker.get('page_url', 'n/a')}",
+                f"- Why now: {blocker.get('why_now', 'n/a')}",
+                f"- Recommended fix: {blocker.get('quick_fix_hint', 'Investigate and patch.')}",
+                "",
+            ]
+        )
+    if not founder_mode.get("top_blockers"):
+        lines.append("- No blocker tickets generated.")
+    return "\n".join(lines).strip() + "\n"
+
+
+def _build_ticket_csv(founder_mode: dict[str, Any]) -> str:
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(
+        [
+            "ticket_id",
+            "cluster_id",
+            "severity",
+            "type",
+            "title",
+            "occurrences",
+            "affected_pages",
+            "why_now",
+            "recommended_fix",
+        ]
+    )
+    blockers = founder_mode.get("top_blockers") or []
+    for idx, blocker in enumerate(blockers, start=1):
+        writer.writerow(
+            [
+                idx,
+                blocker.get("cluster_id", ""),
+                blocker.get("severity", ""),
+                blocker.get("type", ""),
+                blocker.get("title", ""),
+                blocker.get("occurrences", 1),
+                " | ".join(blocker.get("affected_pages") or []),
+                blocker.get("why_now", ""),
+                blocker.get("quick_fix_hint", ""),
+            ]
+        )
+    if not blockers:
+        writer.writerow([1, "", "low", "none", "No urgent engineering tickets from this run.", 0, "", "", ""])
+    return output.getvalue()

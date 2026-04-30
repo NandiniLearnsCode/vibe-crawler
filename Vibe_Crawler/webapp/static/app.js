@@ -16,6 +16,11 @@ const findingsContainer = document.getElementById("findings-container");
 const pagesContainer = document.getElementById("pages-container");
 const reportLink = document.getElementById("report-link");
 const reportLinkWrap = document.getElementById("report-link-wrap");
+const ticketMarkdownLink = document.getElementById("ticket-markdown-link");
+const ticketMarkdownLinkWrap = document.getElementById("ticket-markdown-link-wrap");
+const ticketCsvLink = document.getElementById("ticket-csv-link");
+const ticketCsvLinkWrap = document.getElementById("ticket-csv-link-wrap");
+const copyTicketsButton = document.getElementById("copy-tickets-btn");
 const agenticJsonLink = document.getElementById("agentic-json-link");
 const agenticJsonLinkWrap = document.getElementById("agentic-json-link-wrap");
 const agenticMdLink = document.getElementById("agentic-md-link");
@@ -41,6 +46,8 @@ function resetView() {
   findingsContainer.innerHTML = "";
   pagesContainer.innerHTML = "";
   reportLinkWrap.classList.add("hidden");
+  ticketMarkdownLinkWrap.classList.add("hidden");
+  ticketCsvLinkWrap.classList.add("hidden");
   agenticJsonLinkWrap.classList.add("hidden");
   agenticMdLinkWrap.classList.add("hidden");
   agenticShareLinkWrap.classList.add("hidden");
@@ -72,6 +79,30 @@ function renderSeverity(summary) {
     box.className = "metric";
     box.innerHTML = `<div class="k">${sev.toUpperCase()}</div><div class="v">${map[sev] || 0}</div>`;
     severityContainer.appendChild(box);
+  }
+}
+
+function renderClusters(report) {
+  const clusters = report.summary?.root_cause_clusters || [];
+  const stats = document.getElementById("cluster-summary");
+  const list = document.getElementById("cluster-list");
+  stats.innerHTML = "";
+  list.innerHTML = "";
+  if (!clusters.length) {
+    return;
+  }
+  const reducedBy = report.summary?.cluster_reduction || 0;
+  const stat = document.createElement("div");
+  stat.className = "metric";
+  stat.innerHTML = `<div class="k">Clustered Root Causes</div><div class="v">${clusters.length}</div><div class="muted">Collapsed ${reducedBy} duplicate finding(s)</div>`;
+  stats.appendChild(stat);
+
+  for (const cluster of clusters) {
+    const item = document.createElement("li");
+    item.className = "bug-meta";
+    const sev = String(cluster.severity || "medium").toUpperCase();
+    item.textContent = `[${sev}] ${cluster.title || "Root cause"} — ${cluster.occurrence_count || 1} occurrence(s)`;
+    list.appendChild(item);
   }
 }
 
@@ -205,6 +236,36 @@ function renderDigest(report) {
   }
 }
 
+async function copyTicketsToClipboard(jobId, report) {
+  let text = "";
+  if (report?.digest?.founder_mode?.engineering_ticket_block) {
+    text = report.digest.founder_mode.engineering_ticket_block;
+  }
+  if (!text) {
+    try {
+      const response = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/download/tickets-markdown`);
+      if (response.ok) {
+        text = await response.text();
+      }
+    } catch (error) {
+      text = "";
+    }
+  }
+  if (!text) {
+    alert("No ticket content available for this run.");
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    copyTicketsButton.textContent = "Copied tickets";
+    setTimeout(() => {
+      copyTicketsButton.textContent = "Copy tickets";
+    }, 1500);
+  } catch (error) {
+    alert("Could not copy tickets. You can download the markdown file instead.");
+  }
+}
+
 function renderPages(report) {
   const pages = report.pages || [];
   pageMeta.textContent = `${pages.length} page(s) crawled`;
@@ -226,12 +287,20 @@ function renderReport(report, jobId, jobMeta = null) {
   document.getElementById("pages-crawled").textContent = summary.pages_crawled ?? 0;
   document.getElementById("total-bugs").textContent = summary.total_bugs ?? 0;
   renderSeverity(summary);
+  renderClusters(report);
   renderDigest(report);
   renderFindings(report);
   renderPages(report);
 
   reportLink.href = `/api/jobs/${encodeURIComponent(jobId)}/download`;
   reportLinkWrap.classList.remove("hidden");
+  ticketMarkdownLink.href = `/api/jobs/${encodeURIComponent(jobId)}/download/tickets-markdown`;
+  ticketMarkdownLinkWrap.classList.remove("hidden");
+  ticketCsvLink.href = `/api/jobs/${encodeURIComponent(jobId)}/download/tickets-csv`;
+  ticketCsvLinkWrap.classList.remove("hidden");
+  copyTicketsButton.onclick = () => {
+    copyTicketsToClipboard(jobId, report);
+  };
 
   if (jobMeta && jobMeta.agentic_json_path) {
     agenticJsonLink.href = `/api/jobs/${encodeURIComponent(jobId)}/download/agentic-json`;

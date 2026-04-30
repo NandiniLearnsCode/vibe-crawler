@@ -153,10 +153,33 @@ What the UI does:
 - submit crawl jobs with URL + limits
 - choose deterministic vs agentic run mode
 - poll job status
+- show founder-first digest with clustered root causes
 - render grouped bug findings by severity
 - show screenshot path and evidence fields
 - provide downloads for report JSON and (for agentic runs) triage JSON + markdown
+- provide one-click engineering ticket exports (Markdown and CSV)
 - provide a shareable rendered report page at `/share/{job_id}` for completed agentic runs
+
+## Founder readability improvements
+
+The reporting pipeline now adds two actionability layers:
+
+- **Issue clustering / root causes**:
+  - groups related findings into root-cause clusters
+  - includes impact-oriented summary fields (`clusters_total`, `findings_collapsed`)
+  - each cluster lists affected pages and bug IDs
+- **One-click ticket exports**:
+  - Markdown (`*-tickets.md`) for Linear/Jira/GitHub issue drafting
+  - CSV (`*-tickets.csv`) for spreadsheet workflows
+
+In the web API:
+- `GET /api/jobs/{job_id}/download/tickets-markdown`
+- `GET /api/jobs/{job_id}/download/tickets-csv`
+
+In the dashboard:
+- **Download ticket list (Markdown)**
+- **Download ticket list (CSV)**
+- **Copy ticket block** button (copies founder ticket list to clipboard)
 
 ## Deploy for sharing (recommended: Render)
 

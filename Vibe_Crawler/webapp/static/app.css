@@ -136,6 +136,13 @@ button:disabled {
   color: #cbd5e1;
 }
 
+.button-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
 .metric {
   background: #0b1220;
   border: 1px solid #334155;

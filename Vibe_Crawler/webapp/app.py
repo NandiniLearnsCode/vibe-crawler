@@ -62,6 +62,8 @@ class JobState:
     finished_at: str | None = None
     error: str | None = None
     report_path: str | None = None
+    ticket_export_json_path: str | None = None
+    ticket_export_markdown_path: str | None = None
     agentic_json_path: str | None = None
     agentic_markdown_path: str | None = None
     summary: str | None = None
@@ -78,6 +80,8 @@ class JobState:
             "finished_at": self.finished_at,
             "error": self.error,
             "report_path": self.report_path,
+            "ticket_export_json_path": self.ticket_export_json_path,
+            "ticket_export_markdown_path": self.ticket_export_markdown_path,
             "agentic_json_path": self.agentic_json_path,
             "agentic_markdown_path": self.agentic_markdown_path,
             "summary": self.summary,
@@ -138,11 +142,15 @@ async def _run_crawl_job(job: JobState, request: CrawlRequest) -> None:
             orchestrator = CrawlOrchestrator(config=config, headless=True)
             report = await orchestrator.run()
         save_json_report(report, report_path, presentation_mode=config.presentation_mode)
+        ticket_exports = save_ticket_exports(report, report_path, presentation_mode=config.presentation_mode)
         triage_outputs = save_agentic_outputs(report, report_path, presentation_mode=config.presentation_mode)
 
         job.status = "completed"
         job.finished_at = datetime.now(timezone.utc).isoformat()
         job.report_path = str(report_path)
+        if ticket_exports:
+            job.ticket_export_json_path = str(ticket_exports[0])
+            job.ticket_export_markdown_path = str(ticket_exports[1])
         if triage_outputs:
             job.agentic_json_path = str(triage_outputs[0])
             job.agentic_markdown_path = str(triage_outputs[1])
