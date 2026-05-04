@@ -176,8 +176,8 @@ async def _run_crawl_job(job: JobState, request: CrawlRequest) -> None:
         job.finished_at = datetime.now(timezone.utc).isoformat()
         job.report_path = str(report_path)
         if ticket_exports:
-            job.ticket_export_json_path = str(ticket_exports[0])
-            job.ticket_export_markdown_path = str(ticket_exports[1])
+            job.ticket_export_markdown_path = str(ticket_exports[0])
+            job.ticket_export_csv_path = str(ticket_exports[1])
         if triage_outputs:
             job.agentic_json_path = str(triage_outputs[0])
             job.agentic_markdown_path = str(triage_outputs[1])
