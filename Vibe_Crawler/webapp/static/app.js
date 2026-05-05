@@ -1,46 +1,51 @@
-const form = document.getElementById("crawl-form");
-const urlInput = document.getElementById("url-input");
-const modeCheckbox = document.getElementById("agentic-mode");
-const founderModeCheckbox = document.getElementById("founder-mode");
-const statusCard = document.getElementById("status-card");
-const statusText = document.getElementById("status-text");
-const summaryCard = document.getElementById("summary-card");
-const severityContainer = document.getElementById("severity-breakdown");
-const digestCard = document.getElementById("digest-card");
-const digestTitle = document.getElementById("digest-title");
-const digestHeadline = document.getElementById("digest-headline");
-const digestHighlights = document.getElementById("digest-highlights");
-const digestTopFindings = document.getElementById("digest-top-findings");
-const digestFixFirst = document.getElementById("digest-fix-first");
-const findingsContainer = document.getElementById("findings-container");
-const pagesContainer = document.getElementById("pages-container");
-const reportLink = document.getElementById("report-link");
-const reportLinkWrap = document.getElementById("report-link-wrap");
-const ticketMarkdownLink = document.getElementById("ticket-markdown-link");
-const ticketMarkdownLinkWrap = document.getElementById("ticket-markdown-link-wrap");
-const ticketCsvLink = document.getElementById("ticket-csv-link");
-const ticketCsvLinkWrap = document.getElementById("ticket-csv-link-wrap");
-const copyTicketsButton = document.getElementById("copy-tickets-btn");
-const ticketGithubLink = document.getElementById("ticket-github-link");
-const ticketGithubLinkWrap = document.getElementById("ticket-github-link-wrap");
-const ticketLinearLink = document.getElementById("ticket-linear-link");
-const ticketLinearLinkWrap = document.getElementById("ticket-linear-link-wrap");
-const pushGithubPreviewButton = document.getElementById("push-github-preview-btn");
-const pushLinearPreviewButton = document.getElementById("push-linear-preview-btn");
-const pushStatusText = document.getElementById("push-status-text");
-const pushPreviewCard = document.getElementById("push-preview-card");
-const pushPreviewTitle = document.getElementById("push-preview-title");
-const pushPreviewBody = document.getElementById("push-preview-body");
-const pushConfirmButton = document.getElementById("push-confirm-btn");
-const pushCancelButton = document.getElementById("push-cancel-btn");
-const agenticJsonLink = document.getElementById("agentic-json-link");
-const agenticJsonLinkWrap = document.getElementById("agentic-json-link-wrap");
-const agenticMdLink = document.getElementById("agentic-md-link");
-const agenticMdLinkWrap = document.getElementById("agentic-md-link-wrap");
-const agenticShareLink = document.getElementById("agentic-share-link");
-const agenticShareLinkWrap = document.getElementById("agentic-share-link-wrap");
-const emptyFindings = document.getElementById("empty-findings");
-const pageMeta = document.getElementById("page-meta");
+const byId = (id) => document.getElementById(id);
+
+const form = byId("crawl-form");
+const urlInput = byId("url-input");
+const modeCheckbox = byId("agentic-mode");
+const founderModeCheckbox = byId("founder-mode");
+const statusCard = byId("status-card");
+const statusText = byId("status-text");
+const summaryCard = byId("summary-card");
+const severityContainer = byId("severity-breakdown");
+const digestCard = byId("digest-card");
+const digestTitle = byId("digest-title");
+const digestHeadline = byId("digest-headline");
+const digestHighlights = byId("digest-highlights");
+const digestRootCauses = byId("digest-root-causes");
+const digestTopFindings = byId("digest-top-findings");
+const digestFixFirst = byId("digest-fix-first");
+const findingsContainer = byId("findings-container");
+const pagesContainer = byId("pages-container");
+const reportLink = byId("report-link");
+const reportLinkWrap = byId("report-link-wrap");
+const ticketMdLink = byId("ticket-md-link");
+const ticketCsvLink = byId("ticket-csv-link");
+const ticketGithubLink = byId("ticket-github-link");
+const ticketLinearLink = byId("ticket-linear-link");
+const ticketMarkdownLink = byId("ticket-markdown-link");
+const ticketCsvDownloadLink = byId("ticket-csv-download-link");
+const ticketMarkdownLinkWrap = byId("ticket-md-link-wrap");
+const ticketCsvLinkWrap = byId("ticket-csv-link-wrap");
+const copyTicketsButton = byId("copy-ticket-list-btn");
+const pushGithubPreviewButton = byId("push-github-preview-btn");
+const pushLinearPreviewButton = byId("push-linear-preview-btn");
+const pushPreviewCard = byId("ticket-push-preview");
+const pushPreviewTitle = byId("ticket-push-target");
+const pushPreviewBody = byId("ticket-push-body");
+const pushStatusText = byId("ticket-push-status");
+const pushConfirmButton = byId("ticket-push-confirm-btn");
+const pushCancelButton = byId("ticket-push-cancel-btn");
+const agenticJsonLink = byId("agentic-json-link");
+const agenticJsonLinkWrap = byId("agentic-json-link-wrap");
+const agenticMdLink = byId("agentic-md-link");
+const agenticMdLinkWrap = byId("agentic-md-link-wrap");
+const agenticShareLink = byId("agentic-share-link");
+const agenticShareLinkWrap = byId("agentic-share-link-wrap");
+const clusterSummary = byId("cluster-summary");
+const clusterList = byId("cluster-list");
+const emptyFindings = byId("empty-findings");
+const pageMeta = byId("page-meta");
 
 let pollTimer = null;
 let pendingPushAction = null;
@@ -54,20 +59,25 @@ function resetView() {
   severityContainer.innerHTML = "";
   digestHeadline.textContent = "";
   digestHighlights.innerHTML = "";
+  digestRootCauses.innerHTML = "";
   digestTopFindings.innerHTML = "";
   digestFixFirst.innerHTML = "";
+  clusterSummary.innerHTML = "";
+  clusterList.innerHTML = "";
   findingsContainer.innerHTML = "";
   pagesContainer.innerHTML = "";
-  reportLinkWrap.classList.add("hidden");
-  ticketMarkdownLinkWrap.classList.add("hidden");
-  ticketCsvLinkWrap.classList.add("hidden");
-  ticketGithubLinkWrap.classList.add("hidden");
-  ticketLinearLinkWrap.classList.add("hidden");
+  if (reportLinkWrap) reportLinkWrap.classList.add("hidden");
+  if (ticketMarkdownLinkWrap) ticketMarkdownLinkWrap.classList.add("hidden");
+  if (ticketCsvLinkWrap) ticketCsvLinkWrap.classList.add("hidden");
+  if (ticketMdLink) ticketMdLink.classList.add("hidden");
+  if (ticketCsvLink) ticketCsvLink.classList.add("hidden");
+  if (ticketGithubLink) ticketGithubLink.classList.add("hidden");
+  if (ticketLinearLink) ticketLinearLink.classList.add("hidden");
   agenticJsonLinkWrap.classList.add("hidden");
   agenticMdLinkWrap.classList.add("hidden");
   agenticShareLinkWrap.classList.add("hidden");
-  pushPreviewCard.hidden = true;
-  pushStatusText.textContent = "";
+  if (pushPreviewCard) pushPreviewCard.classList.add("hidden");
+  if (pushStatusText) pushStatusText.textContent = "";
   pendingPushAction = null;
   emptyFindings.classList.add("hidden");
   pageMeta.textContent = "";
@@ -101,26 +111,27 @@ function renderSeverity(summary) {
 }
 
 function renderClusters(report) {
-  const clusters = report.summary?.root_cause_clusters || [];
-  const stats = document.getElementById("cluster-summary");
-  const list = document.getElementById("cluster-list");
-  stats.innerHTML = "";
-  list.innerHTML = "";
+  const clusters = report.issue_clusters || [];
+  if (!clusterSummary || !clusterList) return;
+  clusterSummary.innerHTML = "";
+  clusterList.innerHTML = "";
   if (!clusters.length) {
     return;
   }
-  const reducedBy = report.summary?.cluster_reduction || 0;
+  const reducedBy = Math.max((report.summary?.total_bugs || 0) - clusters.length, 0);
   const stat = document.createElement("div");
   stat.className = "metric";
   stat.innerHTML = `<div class="k">Clustered Root Causes</div><div class="v">${clusters.length}</div><div class="muted">Collapsed ${reducedBy} duplicate finding(s)</div>`;
-  stats.appendChild(stat);
+  clusterSummary.appendChild(stat);
 
   for (const cluster of clusters) {
     const item = document.createElement("li");
     item.className = "bug-meta";
-    const sev = String(cluster.severity || "medium").toUpperCase();
-    item.textContent = `[${sev}] ${cluster.title || "Root cause"} — ${cluster.occurrence_count || 1} occurrence(s)`;
-    list.appendChild(item);
+    const sev = String(cluster.severity_highest || "medium").toUpperCase();
+    const title = cluster.root_cause_hint || cluster.type || "Root cause";
+    const count = cluster.occurrences || 1;
+    item.textContent = `[${sev}] ${title} — ${count} occurrence(s)`;
+    clusterList.appendChild(item);
   }
 }
 
@@ -224,6 +235,20 @@ function renderDigest(report) {
     digestHighlights.appendChild(li);
   }
 
+  digestRootCauses.innerHTML = "";
+  for (const cluster of digest.clustered_top_issues || []) {
+    const li = document.createElement("li");
+    li.className = "bug-meta";
+    li.textContent = `[${String(cluster.severity_highest || "medium").toUpperCase()}] ${cluster.root_cause_hint || cluster.type || "Root cause"} (${cluster.occurrences || 1}x)`;
+    digestRootCauses.appendChild(li);
+  }
+  if (!digestRootCauses.children.length) {
+    const li = document.createElement("li");
+    li.className = "bug-meta";
+    li.textContent = "No clustered root causes for this run.";
+    digestRootCauses.appendChild(li);
+  }
+
   digestTopFindings.innerHTML = "";
   for (const finding of founderMode.top_blockers || digest.fix_first || []) {
     const li = document.createElement("li");
@@ -322,7 +347,7 @@ async function confirmPush() {
     }
     const count = data.items_created ?? 0;
     pushStatusText.textContent = `Push successful: created ${count} ${kind === "github" ? "GitHub issue(s)" : "Linear issue(s)"}.`;
-    pushPreviewCard.hidden = true;
+    if (pushPreviewCard) pushPreviewCard.classList.add("hidden");
     pendingPushAction = null;
   } catch (error) {
     pushStatusText.textContent = `Push failed: ${error.message}`;
@@ -357,23 +382,45 @@ function renderReport(report, jobId, jobMeta = null) {
 
   reportLink.href = `/api/jobs/${encodeURIComponent(jobId)}/download`;
   reportLinkWrap.classList.remove("hidden");
-  ticketMarkdownLink.href = `/api/jobs/${encodeURIComponent(jobId)}/download/tickets/md`;
-  ticketMarkdownLinkWrap.classList.remove("hidden");
-  ticketCsvLink.href = `/api/jobs/${encodeURIComponent(jobId)}/download/tickets/csv`;
-  ticketCsvLinkWrap.classList.remove("hidden");
-  ticketGithubLink.href = `/api/jobs/${encodeURIComponent(jobId)}/download/tickets/github`;
-  ticketGithubLinkWrap.classList.remove("hidden");
-  ticketLinearLink.href = `/api/jobs/${encodeURIComponent(jobId)}/download/tickets/linear`;
-  ticketLinearLinkWrap.classList.remove("hidden");
-  copyTicketsButton.onclick = () => {
-    copyTicketsToClipboard(jobId, report);
-  };
-  pushGithubPreviewButton.onclick = () => {
-    requestPushPreview(jobId, "github");
-  };
-  pushLinearPreviewButton.onclick = () => {
-    requestPushPreview(jobId, "linear");
-  };
+  if (ticketMdLink) {
+    ticketMdLink.href = `/api/jobs/${encodeURIComponent(jobId)}/download/tickets/md`;
+    ticketMdLink.classList.remove("hidden");
+  }
+  if (ticketCsvLink) {
+    ticketCsvLink.href = `/api/jobs/${encodeURIComponent(jobId)}/download/tickets/csv`;
+    ticketCsvLink.classList.remove("hidden");
+  }
+  if (ticketGithubLink) {
+    ticketGithubLink.href = `/api/jobs/${encodeURIComponent(jobId)}/download/tickets/github`;
+    ticketGithubLink.classList.remove("hidden");
+  }
+  if (ticketLinearLink) {
+    ticketLinearLink.href = `/api/jobs/${encodeURIComponent(jobId)}/download/tickets/linear`;
+    ticketLinearLink.classList.remove("hidden");
+  }
+  if (ticketMarkdownLink) {
+    ticketMarkdownLink.href = `/api/jobs/${encodeURIComponent(jobId)}/download/tickets/md`;
+  }
+  if (ticketCsvDownloadLink) {
+    ticketCsvDownloadLink.href = `/api/jobs/${encodeURIComponent(jobId)}/download/tickets/csv`;
+  }
+  if (ticketMarkdownLinkWrap) ticketMarkdownLinkWrap.classList.remove("hidden");
+  if (ticketCsvLinkWrap) ticketCsvLinkWrap.classList.remove("hidden");
+  if (copyTicketsButton) {
+    copyTicketsButton.onclick = () => {
+      copyTicketsToClipboard(jobId, report);
+    };
+  }
+  if (pushGithubPreviewButton) {
+    pushGithubPreviewButton.onclick = () => {
+      requestPushPreview(jobId, "github");
+    };
+  }
+  if (pushLinearPreviewButton) {
+    pushLinearPreviewButton.onclick = () => {
+      requestPushPreview(jobId, "linear");
+    };
+  }
 
   if (jobMeta && jobMeta.agentic_json_path) {
     agenticJsonLink.href = `/api/jobs/${encodeURIComponent(jobId)}/download/agentic-json`;
@@ -387,12 +434,16 @@ function renderReport(report, jobId, jobMeta = null) {
   }
 }
 
-pushConfirmButton.addEventListener("click", confirmPush);
-pushCancelButton.addEventListener("click", () => {
-  pushPreviewCard.hidden = true;
-  pendingPushAction = null;
-  pushStatusText.textContent = "Push cancelled.";
-});
+if (pushConfirmButton) {
+  pushConfirmButton.addEventListener("click", confirmPush);
+}
+if (pushCancelButton) {
+  pushCancelButton.addEventListener("click", () => {
+    if (pushPreviewCard) pushPreviewCard.classList.add("hidden");
+    pendingPushAction = null;
+    if (pushStatusText) pushStatusText.textContent = "Push cancelled.";
+  });
+}
 
 async function pollJob(jobId) {
   if (pollTimer) clearTimeout(pollTimer);

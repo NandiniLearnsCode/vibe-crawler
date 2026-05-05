@@ -198,6 +198,29 @@ button:disabled {
   margin-top: 10px;
 }
 
+.ticket-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.ticket-preview {
+  margin-top: 10px;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 10px;
+  background: #020617;
+}
+
+.ticket-preview pre {
+  margin: 8px 0;
+  max-height: 180px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
 .metric {
   background: #0b1220;
   border: 1px solid #334155;

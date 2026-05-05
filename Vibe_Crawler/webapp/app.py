@@ -132,6 +132,7 @@ app.mount("/artifacts", StaticFiles(directory=str(ARTIFACTS_DIR)), name="artifac
 _jobs: dict[str, JobState] = {}
 _tasks: dict[str, asyncio.Task] = {}
 _job_lock = asyncio.Lock()
+_ticket_push_previews: dict[tuple[str, str], TicketPushPreviewState] = {}
 
 
 def _job_paths(job_id: str) -> tuple[Path, Path]:
@@ -206,6 +207,76 @@ async def _create_job(request: CrawlRequest) -> JobState:
 
 def _load_report_payload(report_path: str) -> dict[str, Any]:
     return json.loads(Path(report_path).read_text())
+
+
+def _build_issue_payload_preview(job_id: str, report: dict[str, Any], max_items: int = 20) -> dict[str, Any]:
+    founder = (report.get("digest") or {}).get("founder_mode") or {}
+    blockers = founder.get("top_blockers") or []
+    issues: list[dict[str, Any]] = []
+    for blocker in blockers[:max_items]:
+        severity = str(blocker.get("severity", "medium")).upper()
+        title = str(blocker.get("title", "Untitled issue"))
+        labels = [str(blocker.get("type", "crawler")), str(blocker.get("severity", "medium"))]
+        pages = blocker.get("affected_pages") or []
+        page_scope = ", ".join(pages[:5]) if pages else str(blocker.get("page_url", "n/a"))
+        body = "\n".join(
+            [
+                f"Run: {job_id}",
+                f"Cluster: {blocker.get('cluster_id', 'n/a')}",
+                f"Severity: {severity}",
+                f"Occurrences: {blocker.get('occurrences', 1)}",
+                f"Affected pages: {page_scope}",
+                f"Why now: {blocker.get('why_now', 'n/a')}",
+                f"Recommended fix: {blocker.get('quick_fix_hint', 'Investigate and patch.')}",
+            ]
+        )
+        issues.append(
+            {
+                "title": f"[{severity}] {title}",
+                "body": body,
+                "labels": labels,
+            }
+        )
+    return {
+        "summary": {
+            "issues_count": len(issues),
+        },
+        "issues": issues,
+    }
+
+
+def _build_github_issue_markdown(issues: list[dict[str, Any]]) -> str:
+    lines = ["# GitHub Issues Export", ""]
+    if not issues:
+        return "# GitHub Issues Export\n\nNo issues generated.\n"
+    for idx, issue in enumerate(issues, start=1):
+        lines.extend(
+            [
+                f"## {idx}. {issue.get('title', 'Untitled issue')}",
+                f"Labels: {', '.join(issue.get('labels') or [])}",
+                "",
+                issue.get("body", ""),
+                "",
+            ]
+        )
+    return "\n".join(lines).strip() + "\n"
+
+
+def _build_linear_issue_markdown(issues: list[dict[str, Any]]) -> str:
+    lines = ["# Linear Issues Export", ""]
+    if not issues:
+        return "# Linear Issues Export\n\nNo issues generated.\n"
+    for idx, issue in enumerate(issues, start=1):
+        lines.extend(
+            [
+                f"## {idx}. {issue.get('title', 'Untitled issue')}",
+                f"Priority labels: {', '.join(issue.get('labels') or [])}",
+                "",
+                issue.get("body", ""),
+                "",
+            ]
+        )
+    return "\n".join(lines).strip() + "\n"
 
 
 def _markdown_to_html(markdown: str) -> str:
@@ -330,6 +401,110 @@ async def download_agentic_markdown(job_id: str) -> FileResponse:
     if not triage_path.exists():
         raise HTTPException(status_code=404, detail="Agentic markdown file missing")
     return FileResponse(path=triage_path, filename=f"{job_id}-agentic-output.md")
+
+
+@app.get("/api/jobs/{job_id}/download/tickets/md")
+async def download_ticket_markdown(job_id: str) -> FileResponse:
+    job = _jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if not job.ticket_export_markdown_path:
+        raise HTTPException(status_code=404, detail="Ticket markdown unavailable for this run")
+    ticket_path = Path(job.ticket_export_markdown_path)
+    if not ticket_path.exists():
+        raise HTTPException(status_code=404, detail="Ticket markdown file missing")
+    return FileResponse(path=ticket_path, filename=f"{job_id}-tickets.md")
+
+
+@app.get("/api/jobs/{job_id}/download/tickets/csv")
+async def download_ticket_csv(job_id: str) -> FileResponse:
+    job = _jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if not job.ticket_export_csv_path:
+        raise HTTPException(status_code=404, detail="Ticket CSV unavailable for this run")
+    ticket_path = Path(job.ticket_export_csv_path)
+    if not ticket_path.exists():
+        raise HTTPException(status_code=404, detail="Ticket CSV file missing")
+    return FileResponse(path=ticket_path, filename=f"{job_id}-tickets.csv")
+
+
+@app.get("/api/jobs/{job_id}/download/tickets/github")
+async def download_ticket_github_markdown(job_id: str) -> HTMLResponse:
+    job = _jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if not job.report_path:
+        raise HTTPException(status_code=404, detail="Report unavailable")
+    payload = _load_report_payload(job.report_path)
+    preview = _build_issue_payload_preview(job_id, payload)
+    content = _build_github_issue_markdown(preview["issues"])
+    return HTMLResponse(content=content, media_type="text/markdown")
+
+
+@app.get("/api/jobs/{job_id}/download/tickets/linear")
+async def download_ticket_linear_markdown(job_id: str) -> HTMLResponse:
+    job = _jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if not job.report_path:
+        raise HTTPException(status_code=404, detail="Report unavailable")
+    payload = _load_report_payload(job.report_path)
+    preview = _build_issue_payload_preview(job_id, payload)
+    content = _build_linear_issue_markdown(preview["issues"])
+    return HTMLResponse(content=content, media_type="text/markdown")
+
+
+@app.get("/api/jobs/{job_id}/push-preview/{provider}")
+async def ticket_push_preview(job_id: str, provider: str) -> dict[str, Any]:
+    provider_name = provider.strip().lower()
+    if provider_name not in {"github", "linear"}:
+        raise HTTPException(status_code=400, detail="Provider must be github or linear")
+    job = _jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if not job.report_path:
+        raise HTTPException(status_code=404, detail="Report unavailable")
+    payload = _load_report_payload(job.report_path)
+    preview = _build_issue_payload_preview(job_id, payload)
+    issues = preview["issues"]
+    preview_text = (
+        _build_github_issue_markdown(issues)
+        if provider_name == "github"
+        else _build_linear_issue_markdown(issues)
+    )
+    token = uuid.uuid4().hex[:12]
+    _ticket_push_previews[(job_id, provider_name)] = TicketPushPreviewState(
+        preview_token=token,
+        job_id=job_id,
+        provider=provider_name,
+        target=provider_name,
+        tickets=issues,
+        metadata={"issues_count": len(issues)},
+    )
+    return {
+        "preview_token": token,
+        "provider": provider_name,
+        "issues_count": len(issues),
+        "preview": preview_text,
+    }
+
+
+@app.post("/api/jobs/{job_id}/push-confirm/{provider}")
+async def ticket_push_confirm(job_id: str, provider: str) -> dict[str, Any]:
+    provider_name = provider.strip().lower()
+    if provider_name not in {"github", "linear"}:
+        raise HTTPException(status_code=400, detail="Provider must be github or linear")
+    preview = _ticket_push_previews.get((job_id, provider_name))
+    if not preview:
+        raise HTTPException(status_code=409, detail="No preview found; generate preview first")
+    items_created = len(preview.tickets)
+    return {
+        "status": "ok",
+        "provider": provider_name,
+        "items_created": items_created,
+        "simulated": True,
+    }
 
 
 @app.get("/share/{job_id}", response_class=HTMLResponse)
