@@ -299,6 +299,17 @@ button:disabled {
   margin-bottom: 4px;
 }
 
+.issue-actions {
+  margin-top: 10px;
+  margin-bottom: 6px;
+}
+
+.issue-copy-prompt-btn {
+  background: #1d4ed8;
+  font-size: 0.82rem;
+  padding: 7px 10px;
+}
+
 .hidden {
   display: none;
 }

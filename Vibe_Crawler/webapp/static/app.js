@@ -146,6 +146,64 @@ function renderClusters(report) {
   }
 }
 
+function buildIssueLlmPrompt(bug) {
+  const reproductionSteps = (bug.reproduction_steps || [])
+    .map((step, idx) => `${idx + 1}. ${step}`)
+    .join("\n");
+  const consoleErrors = (bug.console_errors || []).slice(0, 5).join("\n");
+  const networkEvidence = (bug.network_evidence || []).slice(0, 5).join("\n");
+  const impactArea = bug.impact_area || "unknown";
+  const affectedJourney = bug.affected_journey || "unknown";
+  const impactReason = bug.impact_reason || "Not provided in this run.";
+
+  return [
+    "You are a senior web engineer fixing a verified QA bug from an automated website crawl.",
+    "",
+    `Issue ID: ${bug.id || "n/a"}`,
+    `Issue type: ${bug.type || "unknown"}`,
+    `Severity: ${String(bug.severity || "medium").toUpperCase()}`,
+    `Confidence: ${formatPercent(bug.confidence || 0)}`,
+    `Page URL: ${bug.page_url || "n/a"}`,
+    `Title: ${bug.short_title || "Untitled issue"}`,
+    `Description: ${bug.description || "n/a"}`,
+    `Element selector: ${bug.element_selector || "n/a"}`,
+    `Impact area: ${impactArea}`,
+    `Affected journey: ${affectedJourney}`,
+    `Impact reason: ${impactReason}`,
+    "",
+    "Reproduction steps:",
+    reproductionSteps || "1. Reproduction steps were not captured.",
+    "",
+    "Console errors (if any):",
+    consoleErrors || "None captured.",
+    "",
+    "Network evidence (if any):",
+    networkEvidence || "None captured.",
+    "",
+    "Please provide:",
+    "1) The most likely technical root cause.",
+    "2) Exact code areas/components to inspect first.",
+    "3) A minimal but durable patch approach.",
+    "4) Regression tests/checks to prevent this from returning.",
+  ].join("\n");
+}
+
+async function copyIssuePromptToClipboard(button, bug) {
+  const prompt = buildIssueLlmPrompt(bug);
+  try {
+    await navigator.clipboard.writeText(prompt);
+    if (button) {
+      const original = button.textContent;
+      button.textContent = "Copied prompt";
+      setTimeout(() => {
+        button.textContent = original;
+      }, 1500);
+    }
+  } catch (error) {
+    alert("Could not copy prompt. Please try again or use the plain-English prompt box.");
+  }
+}
+
 function renderFindings(report) {
   const bugs = report.bugs || [];
   if (!bugs.length) {
@@ -187,6 +245,17 @@ function renderFindings(report) {
       const desc = document.createElement("p");
       desc.textContent = bug.description;
 
+      const issueActions = document.createElement("div");
+      issueActions.className = "issue-actions";
+      const copyPromptButton = document.createElement("button");
+      copyPromptButton.type = "button";
+      copyPromptButton.className = "issue-copy-prompt-btn";
+      copyPromptButton.textContent = "Copy prompt for LLM";
+      copyPromptButton.addEventListener("click", () => {
+        copyIssuePromptToClipboard(copyPromptButton, bug);
+      });
+      issueActions.appendChild(copyPromptButton);
+
       const steps = document.createElement("ol");
       steps.className = "steps";
       for (const step of bug.reproduction_steps || []) {
@@ -195,7 +264,7 @@ function renderFindings(report) {
         steps.appendChild(li);
       }
 
-      card.append(meta, title, bugMeta, desc, steps);
+      card.append(meta, title, bugMeta, desc, issueActions, steps);
 
       if (bug.screenshot_path) {
         const screenshot = document.createElement("div");
