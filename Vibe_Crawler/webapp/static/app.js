@@ -113,8 +113,8 @@ function renderSeverity(summary) {
 function renderClusters(report) {
   const clusters = report.issue_clusters || [];
   if (!clusterSummary || !clusterList) return;
-  clusterSummary.innerHTML = "";
-  clusterList.innerHTML = "";
+  if (clusterSummary) clusterSummary.innerHTML = "";
+  if (clusterList) clusterList.innerHTML = "";
   if (!clusters.length) {
     return;
   }
