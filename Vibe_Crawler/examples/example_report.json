@@ -1,0 +1,82 @@
+{
+  "run_id": "20260413091500",
+  "start_url": "https://demo-site.com",
+  "started_at": "2026-04-13T09:15:00Z",
+  "finished_at": "2026-04-13T09:15:42Z",
+  "summary": {
+    "pages_crawled": 6,
+    "total_bugs": 3,
+    "bugs_by_severity": {
+      "high": 1,
+      "medium": 2,
+      "low": 0
+    },
+    "bugs_by_type": {
+      "broken_link": 1,
+      "dead_button": 1,
+      "mobile_layout": 1
+    }
+  },
+  "pages": [],
+  "bugs": [
+    {
+      "id": "20260413091500-BUG-0001",
+      "type": "broken_link",
+      "severity": "high",
+      "confidence": 0.99,
+      "page_url": "https://demo-site.com",
+      "element_selector": null,
+      "short_title": "Internal link returns HTTP 404",
+      "description": "Internal link https://demo-site.com/pricing returned HTTP 404.",
+      "reproduction_steps": [
+        "Open https://demo-site.com",
+        "Navigate to link: https://demo-site.com/pricing",
+        "Observe HTTP 404 response"
+      ],
+      "screenshot_path": "artifacts/screenshots/demo-site.com.png",
+      "console_errors": [],
+      "network_evidence": [
+        "https://demo-site.com/pricing -> HTTP 404"
+      ],
+      "detector": "broken_links"
+    },
+    {
+      "id": "20260413091500-BUG-0002",
+      "type": "dead_button",
+      "severity": "medium",
+      "confidence": 0.9,
+      "page_url": "https://demo-site.com/contact",
+      "element_selector": "main > section > button.cta",
+      "short_title": "Interactive element appears non-functional",
+      "description": "Clicking 'Send message' did not trigger navigation, requests, modal open, or visible state changes.",
+      "reproduction_steps": [
+        "Open https://demo-site.com/contact",
+        "Click element: main > section > button.cta",
+        "Observe no visible result after click"
+      ],
+      "screenshot_path": "artifacts/screenshots/demo-site.com_contact.png",
+      "console_errors": [],
+      "network_evidence": [],
+      "detector": "dead_buttons"
+    },
+    {
+      "id": "20260413091500-BUG-0003",
+      "type": "mobile_layout",
+      "severity": "medium",
+      "confidence": 0.88,
+      "page_url": "https://demo-site.com/features",
+      "element_selector": null,
+      "short_title": "Interactive elements are off-screen on mobile",
+      "description": "Detected 4 interactive elements outside the mobile viewport bounds.",
+      "reproduction_steps": [
+        "Open https://demo-site.com/features at 390px viewport width",
+        "Inspect interactive controls",
+        "Observe controls extending off-screen"
+      ],
+      "screenshot_path": "artifacts/screenshots/demo-site.com_features_mobile.png",
+      "console_errors": [],
+      "network_evidence": [],
+      "detector": "mobile_layout"
+    }
+  ]
+}
