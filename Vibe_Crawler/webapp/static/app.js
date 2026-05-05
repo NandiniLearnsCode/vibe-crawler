@@ -62,8 +62,8 @@ function resetView() {
   digestRootCauses.innerHTML = "";
   digestTopFindings.innerHTML = "";
   digestFixFirst.innerHTML = "";
-  clusterSummary.innerHTML = "";
-  clusterList.innerHTML = "";
+  if (clusterSummary) clusterSummary.innerHTML = "";
+  if (clusterList) clusterList.innerHTML = "";
   findingsContainer.innerHTML = "";
   pagesContainer.innerHTML = "";
   if (reportLinkWrap) reportLinkWrap.classList.add("hidden");
