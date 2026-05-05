@@ -153,6 +153,88 @@ def build_digest(
     }
 
 
+def build_plain_english_output(
+    report: CrawlReport, *, issue_clusters: list[dict[str, Any]] | None = None, max_items: int = 5
+) -> dict[str, Any]:
+    clusters = issue_clusters if issue_clusters is not None else build_issue_clusters(report.bugs)
+    summary = report.summary()
+    total_bugs = int(summary.get("total_bugs", 0))
+    pages_crawled = int(summary.get("pages_crawled", 0))
+    severity = summary.get("bugs_by_severity", {})
+    high = int(severity.get("high", 0))
+    medium = int(severity.get("medium", 0))
+    low = int(severity.get("low", 0))
+
+    if total_bugs == 0:
+        overview = (
+            f"We checked {pages_crawled} page(s) and did not find any high-confidence user-facing issues in this run."
+        )
+    else:
+        overview = (
+            f"We checked {pages_crawled} page(s) and found {total_bugs} likely issues "
+            f"({high} high, {medium} medium, {low} low). "
+            f"These are grouped into {len(clusters)} root-cause group(s) to avoid duplicates."
+        )
+
+    plain_items: list[dict[str, Any]] = []
+    for cluster in clusters[:max_items]:
+        issue_type = str(cluster.get("type", "unknown"))
+        pages = list(cluster.get("affected_pages") or [])
+        title = _cluster_title(cluster)
+        quick_fix = str(cluster.get("recommended_fix", "Investigate and patch this root cause."))
+        explanation = _plain_english_issue_explanation(issue_type)
+        engineer_prompt = (
+            f"We have a {issue_type.replace('_', ' ')} issue cluster ({cluster.get('cluster_id', 'n/a')}) "
+            f"affecting {len(pages)} page(s): {', '.join(pages[:5]) or 'n/a'}. "
+            f"Observed root cause hint: {cluster.get('root_cause_hint', 'n/a')}. "
+            f"Please identify the exact failing component and apply a durable fix. "
+            f"Suggested starting point: {quick_fix}"
+        )
+        llm_prompt = (
+            "You are helping debug a website bug cluster.\n"
+            f"Issue type: {issue_type}\n"
+            f"Cluster title: {title}\n"
+            f"Affected pages: {', '.join(pages[:5]) or 'n/a'}\n"
+            f"Observed hint: {cluster.get('root_cause_hint', 'n/a')}\n"
+            f"Desired outcome: propose a concrete fix plan, likely root cause in code, and regression test checklist.\n"
+            f"Current suggested fix: {quick_fix}"
+        )
+        plain_items.append(
+            {
+                "cluster_id": cluster.get("cluster_id", ""),
+                "issue_title": title,
+                "issue_type": issue_type,
+                "severity": str(cluster.get("severity_highest", "medium")),
+                "affected_pages": pages,
+                "what_this_means": explanation,
+                "why_users_feel_it": _cluster_why_now(cluster),
+                "what_to_tell_engineer": engineer_prompt,
+                "prompt_for_llm": llm_prompt,
+                "suggested_fix_start": quick_fix,
+            }
+        )
+
+    overall_engineer_handoff = (
+        "Please prioritize high-severity clusters first, fix one root cause at a time, "
+        "and confirm each fix with a quick manual regression on affected pages."
+    )
+    overall_llm_handoff = (
+        "I have a QA crawl report with clustered issues. For each cluster, give me: "
+        "(1) likely technical root cause, (2) exact code areas to inspect, "
+        "(3) minimal patch plan, (4) tests to prevent regressions."
+    )
+    return {
+        "overview": overview,
+        "how_to_use": (
+            "Share 'what_to_tell_engineer' with your engineer, or paste 'prompt_for_llm' into an LLM "
+            "to brainstorm implementation details."
+        ),
+        "overall_engineer_handoff": overall_engineer_handoff,
+        "overall_llm_handoff": overall_llm_handoff,
+        "issues": plain_items,
+    }
+
+
 def _digest_finding_item(bug: BugReport) -> dict[str, Any]:
     return {
         "id": bug.id,
@@ -300,6 +382,22 @@ def _cluster_fix_hint(bug_type: str, root_cause: str) -> str:
     return f"Address shared root cause: {root_cause.replace('_', ' ')}."
 
 
+def _plain_english_issue_explanation(issue_type: str) -> str:
+    if issue_type == "broken_link":
+        return "Some links send users to the wrong place or an error page."
+    if issue_type == "dead_button":
+        return "A button looks clickable but nothing useful happens."
+    if issue_type == "form_failure":
+        return "Users may not be able to submit important forms."
+    if issue_type == "missing_media":
+        return "Important images or media are not loading correctly."
+    if issue_type == "mobile_layout":
+        return "The page layout breaks on smaller screens."
+    if issue_type == "critical_frontend_error":
+        return "Frontend code errors are likely breaking key interactions."
+    return "Users are likely experiencing a repeatable issue that needs a code fix."
+
+
 def _root_cause_signature(bug: BugReport) -> str:
     text_blob = " ".join(
         [
@@ -378,6 +476,7 @@ def save_json_report(report: CrawlReport, output_path: Path, *, presentation_mod
     payload = report.to_dict()
     payload["digest"] = build_digest(report, presentation_mode=presentation_mode, issue_clusters=clusters)
     payload["issue_clusters"] = clusters
+    payload["plain_english"] = build_plain_english_output(report, issue_clusters=clusters)
     output_path.write_text(json.dumps(payload, indent=2))
 
 
@@ -415,6 +514,16 @@ def save_ticket_exports(
     return ticket_markdown_path, ticket_csv_path
 
 
+def save_plain_english_outputs(report: CrawlReport, output_path: Path) -> tuple[Path, Path]:
+    clusters = build_issue_clusters(report.bugs)
+    plain = build_plain_english_output(report, issue_clusters=clusters)
+    plain_json_path = output_path.with_name(f"{output_path.stem}-plain-english.json")
+    plain_md_path = output_path.with_name(f"{output_path.stem}-plain-english.md")
+    plain_json_path.write_text(json.dumps(plain, indent=2))
+    plain_md_path.write_text(_build_plain_english_markdown(report, plain))
+    return plain_json_path, plain_md_path
+
+
 def _build_agentic_output(report: CrawlReport, *, presentation_mode: str = "founder") -> dict[str, Any]:
     clusters = build_issue_clusters(report.bugs)
     actions = report.agent_trace or []
@@ -440,6 +549,7 @@ def _build_agentic_output(report: CrawlReport, *, presentation_mode: str = "foun
         "start_url": report.start_url,
         "mode": report.mode,
         "digest": build_digest(report, presentation_mode=presentation_mode, issue_clusters=clusters),
+        "plain_english": build_plain_english_output(report, issue_clusters=clusters),
         "issue_clusters": clusters,
         "triage_summary": {
             "pages_crawled": summary.get("pages_crawled", 0),
@@ -505,6 +615,23 @@ def _build_agentic_markdown(triage_output: dict[str, Any]) -> str:
     else:
         lines.append("1. No urgent engineering tickets from this run.")
     lines.append("```")
+
+    plain = triage_output.get("plain_english") or {}
+    lines.extend(["", "## Plain-English Handoff"])
+    lines.append(f"- {plain.get('overview', 'Plain-English summary unavailable.')}")
+    lines.append(f"- Engineer handoff: {plain.get('overall_engineer_handoff', 'n/a')}")
+    lines.append(f"- LLM handoff: {plain.get('overall_llm_handoff', 'n/a')}")
+    plain_issues = plain.get("issues") or []
+    if plain_issues:
+        lines.extend(["", "### Issue-by-issue plain language"])
+        for item in plain_issues[:5]:
+            lines.extend(
+                [
+                    f"- {item.get('cluster_id', 'n/a')} [{str(item.get('severity', 'medium')).upper()}] {item.get('issue_title', 'Untitled')}",
+                    f"  - What this means: {item.get('what_this_means', 'n/a')}",
+                    f"  - Suggested fix start: {item.get('suggested_fix_start', 'n/a')}",
+                ]
+            )
 
     issue_clusters = triage_output.get("issue_clusters") or []
     lines.extend(["", "## Root Cause Clusters"])
@@ -652,3 +779,46 @@ def _build_ticket_csv(founder_mode: dict[str, Any]) -> str:
     if not blockers:
         writer.writerow([1, "", "low", "none", "No urgent engineering tickets from this run.", 0, "", "", ""])
     return output.getvalue()
+
+
+def _build_plain_english_markdown(report: CrawlReport, plain: dict[str, Any]) -> str:
+    lines = [
+        f"# Plain-English QA Report: {report.run_id}",
+        f"- URL: {report.start_url}",
+        f"- Mode: {report.mode}",
+        "",
+        "## Simple summary",
+        plain.get("overview", "No summary available."),
+        "",
+        "## How to use this",
+        plain.get("how_to_use", ""),
+        "",
+        "## What to tell an engineer",
+        plain.get("overall_engineer_handoff", ""),
+        "",
+        "## What to paste into an LLM",
+        plain.get("overall_llm_handoff", ""),
+        "",
+        "## Issue-by-issue guide",
+    ]
+    issues = plain.get("issues") or []
+    if not issues:
+        lines.append("- No major issues detected in this run.")
+    else:
+        for idx, item in enumerate(issues, start=1):
+            lines.extend(
+                [
+                    f"### {idx}. {item.get('issue_title', 'Untitled issue')} ({item.get('cluster_id', 'n/a')})",
+                    f"- Severity: {str(item.get('severity', 'medium')).upper()}",
+                    f"- What this means: {item.get('what_this_means', 'n/a')}",
+                    f"- Why users feel it: {item.get('why_users_feel_it', 'n/a')}",
+                    f"- Suggested fix start: {item.get('suggested_fix_start', 'n/a')}",
+                    f"- Engineer handoff: {item.get('what_to_tell_engineer', 'n/a')}",
+                    "- LLM prompt:",
+                    "```text",
+                    str(item.get("prompt_for_llm", "n/a")),
+                    "```",
+                    "",
+                ]
+            )
+    return "\n".join(lines).strip() + "\n"

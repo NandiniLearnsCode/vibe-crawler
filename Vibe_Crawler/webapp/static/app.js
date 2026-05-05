@@ -15,6 +15,11 @@ const digestHighlights = byId("digest-highlights");
 const digestRootCauses = byId("digest-root-causes");
 const digestTopFindings = byId("digest-top-findings");
 const digestFixFirst = byId("digest-fix-first");
+const plainEnglishCard = byId("plain-english-card");
+const plainEnglishSummary = byId("plain-english-summary");
+const plainEnglishEngineer = byId("plain-english-engineer");
+const plainEnglishLlm = byId("plain-english-llm");
+const plainEnglishCopyBtn = byId("plain-english-copy-btn");
 const findingsContainer = byId("findings-container");
 const pagesContainer = byId("pages-container");
 const reportLink = byId("report-link");
@@ -49,6 +54,7 @@ const pageMeta = byId("page-meta");
 
 let pollTimer = null;
 let pendingPushAction = null;
+let plainEnglishPromptText = "";
 
 function resetView() {
   statusCard.hidden = false;
@@ -62,6 +68,11 @@ function resetView() {
   digestRootCauses.innerHTML = "";
   digestTopFindings.innerHTML = "";
   digestFixFirst.innerHTML = "";
+  if (plainEnglishCard) plainEnglishCard.classList.add("hidden");
+  if (plainEnglishSummary) plainEnglishSummary.textContent = "";
+  if (plainEnglishEngineer) plainEnglishEngineer.innerHTML = "";
+  if (plainEnglishLlm) plainEnglishLlm.value = "";
+  plainEnglishPromptText = "";
   if (clusterSummary) clusterSummary.innerHTML = "";
   if (clusterList) clusterList.innerHTML = "";
   findingsContainer.innerHTML = "";
@@ -279,6 +290,35 @@ function renderDigest(report) {
   }
 }
 
+function renderPlainEnglish(report) {
+  const pe = report.plain_english_report || {};
+  if (!plainEnglishCard || !plainEnglishSummary || !plainEnglishEngineer || !plainEnglishLlm) return;
+  const summaryText = pe.summary || "";
+  const engineerNotes = pe.what_to_tell_engineer || [];
+  const llmPrompt = pe.llm_fix_prompt || "";
+  if (!summaryText && !engineerNotes.length && !llmPrompt) {
+    plainEnglishCard.classList.add("hidden");
+    return;
+  }
+  plainEnglishCard.classList.remove("hidden");
+  plainEnglishSummary.textContent = summaryText || "Plain-English summary unavailable.";
+  plainEnglishEngineer.innerHTML = "";
+  for (const note of engineerNotes) {
+    const li = document.createElement("li");
+    li.className = "bug-meta";
+    li.textContent = note;
+    plainEnglishEngineer.appendChild(li);
+  }
+  if (!plainEnglishEngineer.children.length) {
+    const li = document.createElement("li");
+    li.className = "bug-meta";
+    li.textContent = "No engineer notes generated for this run.";
+    plainEnglishEngineer.appendChild(li);
+  }
+  plainEnglishLlm.value = llmPrompt || "";
+  plainEnglishPromptText = llmPrompt || "";
+}
+
 async function copyTicketsToClipboard(jobId, report) {
   let text = "";
   if (report?.digest?.founder_mode?.engineering_ticket_block) {
@@ -377,6 +417,7 @@ function renderReport(report, jobId, jobMeta = null) {
   renderSeverity(summary);
   renderClusters(report);
   renderDigest(report);
+  renderPlainEnglish(report);
   renderFindings(report);
   renderPages(report);
 
@@ -442,6 +483,25 @@ if (pushCancelButton) {
     if (pushPreviewCard) pushPreviewCard.classList.add("hidden");
     pendingPushAction = null;
     if (pushStatusText) pushStatusText.textContent = "Push cancelled.";
+  });
+}
+
+if (plainEnglishCopyBtn) {
+  plainEnglishCopyBtn.addEventListener("click", async () => {
+    const text = plainEnglishPromptText || (plainEnglishLlm ? plainEnglishLlm.value : "");
+    if (!text) {
+      alert("No LLM prompt available to copy.");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      plainEnglishCopyBtn.textContent = "Copied prompt";
+      setTimeout(() => {
+        plainEnglishCopyBtn.textContent = "Copy prompt";
+      }, 1500);
+    } catch (error) {
+      alert("Could not copy prompt. Please copy manually from the textbox.");
+    }
   });
 }
 

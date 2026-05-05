@@ -154,10 +154,14 @@ What the UI does:
 - choose deterministic vs agentic run mode
 - poll job status
 - show founder-first digest with clustered root causes
+- show a plain-English "Explain it simply" section for each run
 - render grouped bug findings by severity
 - show screenshot path and evidence fields
 - provide downloads for report JSON and (for agentic runs) triage JSON + markdown
 - provide one-click engineering ticket exports (Markdown and CSV)
+- provide plain-English downloads for talking to engineers/LLMs:
+  - `GET /api/jobs/{job_id}/download/plain-english/md`
+  - `GET /api/jobs/{job_id}/download/plain-english/txt`
 - provide a shareable rendered report page at `/share/{job_id}` for completed agentic runs
 
 ## Founder readability improvements

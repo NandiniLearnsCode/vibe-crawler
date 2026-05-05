@@ -68,6 +68,11 @@ class TicketPushConfirmRequest(BaseModel):
     preview_token: str = Field(min_length=8)
 
 
+class PlainEnglishRequest(BaseModel):
+    audience: str = Field(default="non-technical", pattern="^(non-technical|engineer|llm)$")
+    max_items: int = Field(default=5, ge=1, le=20)
+
+
 @dataclass(slots=True)
 class JobState:
     job_id: str
@@ -279,6 +284,109 @@ def _build_linear_issue_markdown(issues: list[dict[str, Any]]) -> str:
     return "\n".join(lines).strip() + "\n"
 
 
+def _build_plain_english_pack(report: dict[str, Any], audience: str = "non-technical", max_items: int = 5) -> dict[str, Any]:
+    digest = report.get("digest") or {}
+    founder = digest.get("founder_mode") or {}
+    blockers = list(founder.get("top_blockers") or [])[:max_items]
+    summary_lines = founder.get("three_line_summary") or []
+    header = summary_lines[0] if summary_lines else str(digest.get("headline", "Run completed."))
+
+    items: list[dict[str, Any]] = []
+    for idx, blocker in enumerate(blockers, start=1):
+        severity = str(blocker.get("severity", "medium")).upper()
+        title = str(blocker.get("title", "Issue"))
+        pages = blocker.get("affected_pages") or []
+        where = ", ".join(pages[:3]) if pages else str(blocker.get("page_url", "n/a"))
+        what_happened = f"{title} is happening on {where}."
+        why_it_matters = str(blocker.get("why_now", "This makes the website harder to use."))
+        fix_hint = str(blocker.get("quick_fix_hint", "Investigate and patch this issue."))
+        say_to_engineer = (
+            f"[{severity}] {title}. Scope: {where}. "
+            f"Observed repeated behavior ({blocker.get('occurrences', 1)} occurrence(s)). "
+            f"Please implement: {fix_hint}"
+        )
+        llm_prompt = (
+            "You are helping debug a website issue.\n"
+            f"Issue: {title}\n"
+            f"Severity: {severity}\n"
+            f"Where it appears: {where}\n"
+            f"Why it matters: {why_it_matters}\n"
+            f"Recommended fix direction: {fix_hint}\n"
+            "Please provide: (1) likely root causes, (2) a step-by-step debugging checklist, "
+            "(3) a concrete implementation patch strategy, and (4) regression tests."
+        )
+        items.append(
+            {
+                "rank": idx,
+                "severity": severity,
+                "issue": title,
+                "what_happened": what_happened,
+                "why_it_matters": why_it_matters,
+                "recommended_fix_direction": fix_hint,
+                "say_to_engineer": say_to_engineer,
+                "prompt_for_llm": llm_prompt,
+            }
+        )
+
+    if not items:
+        items.append(
+            {
+                "rank": 1,
+                "severity": "LOW",
+                "issue": "No urgent issues",
+                "what_happened": "No high-confidence blocker was found in this crawl scope.",
+                "why_it_matters": "You can proceed, or run a wider crawl for more confidence.",
+                "recommended_fix_direction": "Increase max pages/depth and rerun.",
+                "say_to_engineer": "No urgent fix needed from this run.",
+                "prompt_for_llm": "Suggest expanded test coverage for this website crawl.",
+            }
+        )
+
+    intro = {
+        "non-technical": "Plain-English summary for a website owner.",
+        "engineer": "Plain-English handoff to engineering.",
+        "llm": "Plain-English context prepared for an LLM assistant.",
+    }.get(audience, "Plain-English summary.")
+
+    return {
+        "audience": audience,
+        "intro": intro,
+        "header": header,
+        "items": items,
+    }
+
+
+def _plain_english_to_markdown(pack: dict[str, Any], report: dict[str, Any]) -> str:
+    lines = [
+        f"# Plain-English Fix Guide: {report.get('run_id', 'unknown')}",
+        f"- URL: {report.get('start_url', 'n/a')}",
+        f"- Audience: {pack.get('audience', 'non-technical')}",
+        "",
+        f"## Summary",
+        f"- {pack.get('intro', '')}",
+        f"- {pack.get('header', '')}",
+        "",
+        "## Priority Issues (Plain English)",
+    ]
+    for item in pack.get("items", []):
+        lines.extend(
+            [
+                f"### {item.get('rank', '')}. [{item.get('severity', '')}] {item.get('issue', 'Issue')}",
+                f"- What happened: {item.get('what_happened', '')}",
+                f"- Why it matters: {item.get('why_it_matters', '')}",
+                f"- Recommended fix direction: {item.get('recommended_fix_direction', '')}",
+                f"- What to tell an engineer:",
+                f"  - {item.get('say_to_engineer', '')}",
+                f"- Prompt to paste into an LLM:",
+                "```text",
+                str(item.get("prompt_for_llm", "")),
+                "```",
+                "",
+            ]
+        )
+    return "\n".join(lines).strip() + "\n"
+
+
 def _markdown_to_html(markdown: str) -> str:
     lines = markdown.splitlines()
     output: list[str] = []
@@ -356,6 +464,31 @@ async def get_report(job_id: str) -> dict[str, Any]:
     if job.status != "completed" or not job.report_path:
         raise HTTPException(status_code=409, detail="Report not ready")
     return _load_report_payload(job.report_path)
+
+
+@app.post("/api/jobs/{job_id}/plain-english")
+async def plain_english_report(job_id: str, request: PlainEnglishRequest) -> dict[str, Any]:
+    job = _jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status != "completed" or not job.report_path:
+        raise HTTPException(status_code=409, detail="Report not ready")
+    report = _load_report_payload(job.report_path)
+    return _build_plain_english_pack(report, audience=request.audience, max_items=request.max_items)
+
+
+@app.get("/api/jobs/{job_id}/download/plain-english")
+async def download_plain_english_markdown(job_id: str) -> FileResponse:
+    job = _jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status != "completed" or not job.report_path:
+        raise HTTPException(status_code=409, detail="Report not ready")
+    report = _load_report_payload(job.report_path)
+    pack = _build_plain_english_pack(report, audience="non-technical", max_items=5)
+    out_path = Path(job.report_path).with_name(f"{job_id}-plain-english.md")
+    out_path.write_text(_plain_english_to_markdown(pack, report))
+    return FileResponse(path=out_path, filename=f"{job_id}-plain-english.md")
 
 
 @app.get("/api/jobs")

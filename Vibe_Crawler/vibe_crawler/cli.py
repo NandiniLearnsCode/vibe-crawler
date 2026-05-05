@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 from vibe_crawler.agentic import AgenticRunner
 from vibe_crawler.config import CrawlConfig
 from vibe_crawler.orchestrator import CrawlOrchestrator
-from vibe_crawler.reporting import human_summary, save_agentic_outputs, save_json_report
+from vibe_crawler.reporting import human_summary, save_agentic_outputs, save_json_report, save_ticket_exports
 
 
 def parse_args() -> argparse.Namespace:
@@ -144,9 +144,12 @@ async def async_main() -> int:
         report = await orchestrator.run()
 
     save_json_report(report, config.output_path, presentation_mode=config.presentation_mode)
+    ticket_outputs = save_ticket_exports(report, config.output_path, presentation_mode=config.presentation_mode)
     triage_outputs = save_agentic_outputs(report, config.output_path, presentation_mode=config.presentation_mode)
     print(human_summary(report))
     print(f"\nJSON report saved to: {config.output_path}")
+    print(f"Ticket markdown saved to: {ticket_outputs[0]}")
+    print(f"Ticket CSV saved to: {ticket_outputs[1]}")
     if triage_outputs:
         print(f"Agentic triage JSON saved to: {triage_outputs[0]}")
         print(f"Agentic triage markdown saved to: {triage_outputs[1]}")
