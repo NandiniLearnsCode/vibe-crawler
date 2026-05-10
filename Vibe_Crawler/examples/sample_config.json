@@ -1,0 +1,31 @@
+{
+  "start_url": "https://example.com",
+  "max_pages": 8,
+  "max_depth": 2,
+  "timeout_ms": 12000,
+  "same_domain_only": true,
+  "desktop_viewport": [1366, 900],
+  "mobile_viewport": [390, 844],
+  "screenshot_dir": "artifacts/screenshots",
+  "output_path": "artifacts/reports/example-report.json",
+  "dangerous_path_keywords": [
+    "logout",
+    "delete",
+    "remove",
+    "payment",
+    "checkout",
+    "billing",
+    "admin/delete"
+  ],
+  "important_path_keywords": [
+    "pricing",
+    "signup",
+    "login",
+    "contact",
+    "product",
+    "docs",
+    "about"
+  ],
+  "include_mobile_checks": true,
+  "include_form_checks": true
+}

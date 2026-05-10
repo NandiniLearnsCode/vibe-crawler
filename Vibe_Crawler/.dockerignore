@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.git/
+.gitignore
+artifacts/
+webapp/jobs/
+.DS_Store
